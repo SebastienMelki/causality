@@ -8,7 +8,7 @@ Causality is a behavioral analysis system that detects application modifications
 - **gomobile** for generating mobile SDKs
 - **WebAssembly** for web SDK
 - **Protocol Buffers** for event definitions
-- **TCP server** for event collection
+- **HTTP server** for event collection
 - **Behavioral analysis** for anomaly detection
 
 Module: github.com/SebastienMelki/causality (Go 1.25.0)
@@ -61,13 +61,13 @@ Module: github.com/SebastienMelki/causality (Go 1.25.0)
 ```
 causality/
 ├── cmd/
-│   ├── server/         # TCP server for receiving events
+│   ├── server/         # HTTP server for receiving events
 │   └── cli/            # Command-line tools for testing and management
 ├── internal/
 │   ├── analysis/       # Behavioral analysis and anomaly detection
 │   ├── events/         # Event processing and validation
 │   ├── storage/        # Event storage and retrieval
-│   └── tcp/            # TCP server implementation
+│   └── http/           # HTTP server implementation
 ├── pkg/
 │   ├── sdk/            # Shared SDK code between mobile and WASM
 │   └── proto/          # Generated protocol buffer code
@@ -91,18 +91,18 @@ causality/
 ### Data Flow
 1. **Event Generation**: Mobile/Web apps generate custom events
 2. **SDK Processing**: Events are serialized using Protocol Buffers
-3. **Network Transport**: Events sent to TCP server
-4. **Server Reception**: TCP server validates and stores events
+3. **Network Transport**: Events sent to HTTP server via RESTful API
+4. **Server Reception**: HTTP server validates and stores events
 5. **Analysis**: Behavioral analysis engine processes event patterns
 6. **Detection**: Anomalies indicate potential app modifications
 
 ### Key Components
 
-#### TCP Server
-- Handles concurrent client connections
+#### HTTP Server
+- Handles RESTful API requests
 - Protocol Buffer deserialization
 - Event validation and storage
-- Real-time event streaming to analysis engine
+- Event forwarding to analysis engine
 
 #### Mobile SDK (gomobile)
 - Provides native bindings for iOS/Android
@@ -133,7 +133,7 @@ causality/
 
 ### Testing Strategy
 - Unit tests for all business logic
-- Integration tests for TCP server
+- Integration tests for HTTP API endpoints
 - End-to-end tests with example apps
 - Behavioral analysis validation with test datasets
 - Performance benchmarks for event processing

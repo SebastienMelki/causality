@@ -4,7 +4,7 @@ A behavioral analysis system that detects application modifications by analyzing
 
 ## Overview
 
-Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that enable applications to send custom events to a central TCP server. By analyzing these events, the system can detect when an application has been modified or tampered with based on deviations from normal behavioral patterns.
+Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that enable applications to send custom events to a central HTTP server. By analyzing these events, the system can detect when an application has been modified or tampered with based on deviations from normal behavioral patterns.
 
 ## Architecture
 
@@ -22,7 +22,7 @@ Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that
          └───────────┬───────────┘                         │
                      │                                     │
               ┌──────▼──────┐                      ┌──────▼──────┐
-              │  TCP Server  │◄─────────────────────│   Protobuf  │
+              │ HTTP Server  │◄─────────────────────│   Protobuf  │
               │   (Events)   │                      │ Definitions │
               └──────┬───────┘                      └─────────────┘
                      │
@@ -36,7 +36,7 @@ Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that
 
 - **Mobile SDK**: Generated using gomobile for iOS and Android integration
 - **Web SDK**: Compiled to WebAssembly for browser-based applications
-- **TCP Server**: Receives and processes custom events from all clients
+- **HTTP Server**: RESTful API for receiving and processing events from all clients
 - **Protocol Buffers**: Define the structure of custom events
 - **Event UI**: Interface for defining and managing custom event schemas
 - **Analysis Engine**: Detects behavioral anomalies indicating app modifications
@@ -45,7 +45,7 @@ Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that
 
 - Cross-platform event tracking (iOS, Android, Web)
 - Custom event definitions via Protocol Buffers
-- Real-time event streaming over TCP
+- RESTful API for event collection
 - Behavioral pattern analysis
 - Anomaly detection for tampered applications
 - Visual event definition interface
@@ -83,7 +83,7 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 ```
 causality/
 ├── cmd/
-│   ├── server/        # TCP server application
+│   ├── server/        # HTTP server application
 │   └── cli/           # Command-line tools
 ├── internal/
 │   ├── analysis/      # Behavioral analysis engine
@@ -139,7 +139,7 @@ go test ./...
 ### Server
 
 ```bash
-# Start the TCP server
+# Start the HTTP server
 ./bin/causality-server --port 8080
 ```
 
@@ -149,7 +149,7 @@ go test ./...
 // iOS Example
 import Causality
 
-let client = CausalityClient(serverAddress: "tcp://server:8080")
+let client = CausalityClient(serverAddress: "https://server:8080")
 client.sendEvent(CustomEvent(type: "user_action", data: eventData))
 ```
 
@@ -159,7 +159,7 @@ client.sendEvent(CustomEvent(type: "user_action", data: eventData))
 // Web Example
 import { CausalityClient } from './causality.js';
 
-const client = new CausalityClient('ws://server:8080');
+const client = new CausalityClient('https://server:8080');
 await client.sendEvent({
   type: 'user_action',
   data: eventData
