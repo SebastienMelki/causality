@@ -1,0 +1,119 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.prof
+*.cover
+*.coverage
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Build directories
+build/
+dist/
+bin/
+out/
+
+# Mobile build outputs (gomobile)
+*.aar
+*.framework/
+*.xcframework/
+ios/
+android/
+
+# WASM build outputs
+*.wasm
+wasm/
+web/dist/
+
+# Protocol Buffer generated files
+*.pb.go
+*_grpc.pb.go
+# Uncomment if you want to track generated protobuf files
+# !proto/*.pb.go
+
+# IDE specific files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Debug files
+debug
+__debug_bin
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Log files
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with secrets
+config/secrets.yaml
+config/secrets.json
+*.secret
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.p12
+
+# Binary releases
+releases/
+
+# Node modules (if UI component exists)
+node_modules/
+
+# Python virtual environment (if any Python scripts)
+venv/
+env/
+__pycache__/
+*.pyc
