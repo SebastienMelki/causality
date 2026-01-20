@@ -4,167 +4,226 @@ A behavioral analysis system that detects application modifications by analyzing
 
 ## Overview
 
-Causality generates cross-platform SDKs (mobile via gomobile, web via WASM) that enable applications to send custom events to a central HTTP server. By analyzing these events, the system can detect when an application has been modified or tampered with based on deviations from normal behavioral patterns.
+Causality collects events from mobile and web applications, stores them in a data warehouse, and enables SQL-based analytics for behavioral pattern analysis and anomaly detection.
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Mobile Apps   │     │    Web Apps     │     │   Event UI      │
-│  (iOS/Android)  │     │   (Browser)     │     │  (Definition)   │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                         │
-    ┌────▼────┐             ┌────▼────┐                   │
-    │ Mobile  │             │  WASM   │                   │
-    │   SDK   │             │   SDK   │                   │
-    └────┬────┘             └────┬────┘                   │
-         │                       │                         │
-         └───────────┬───────────┘                         │
-                     │                                     │
-              ┌──────▼──────┐                      ┌──────▼──────┐
-              │ HTTP Server  │◄─────────────────────│   Protobuf  │
-              │   (Events)   │                      │ Definitions │
-              └──────┬───────┘                      └─────────────┘
+┌─────────────────┐     ┌─────────────────┐
+│   Mobile Apps   │     │    Web Apps     │
+│  (iOS/Android)  │     │   (Browser)     │
+└────────┬────────┘     └────────┬────────┘
+         │                       │
+         └───────────┬───────────┘
                      │
-           ┌─────────▼─────────┐
-           │ Analysis Engine   │
-           │ (Anomaly Detection)│
-           └───────────────────┘
+              ┌──────▼──────┐
+              │ HTTP Server │ :8080
+              └──────┬──────┘
+                     │
+              ┌──────▼──────┐
+              │    NATS     │ JetStream
+              └──────┬──────┘
+                     │
+              ┌──────▼──────┐
+              │  Warehouse  │ Parquet files
+              │    Sink     │ → MinIO (S3)
+              └──────┬──────┘
+                     │
+              ┌──────▼──────┐
+              │    Trino    │ SQL Analytics
+              └──────┬──────┘
+                     │
+              ┌──────▼──────┐
+              │   Redash    │ Visualization
+              └─────────────┘
 ```
 
 ### Components
 
-- **Mobile SDK**: Generated using gomobile for iOS and Android integration
-- **Web SDK**: Compiled to WebAssembly for browser-based applications
-- **HTTP Server**: RESTful API for receiving and processing events from all clients
-- **Protocol Buffers**: Define the structure of custom events
-- **Event UI**: Interface for defining and managing custom event schemas
-- **Analysis Engine**: Detects behavioral anomalies indicating app modifications
+- **HTTP Server**: RESTful API for event ingestion (`/v1/events/ingest`, `/v1/events/batch`)
+- **NATS JetStream**: Event streaming and reliable delivery
+- **Warehouse Sink**: Consumes events, writes Parquet files to S3
+- **MinIO**: S3-compatible object storage for event data
+- **Hive Metastore**: Schema registry for Trino
+- **Trino**: SQL query engine for analytics on Parquet files
+- **Redash**: Data visualization and dashboards
 
-## Features
-
-- Cross-platform event tracking (iOS, Android, Web)
-- Custom event definitions via Protocol Buffers
-- RESTful API for event collection
-- Behavioral pattern analysis
-- Anomaly detection for tampered applications
-- Visual event definition interface
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
-- Go 1.25.0 or later
-- Protocol Buffer compiler (protoc)
-- gomobile for mobile SDK generation
-- Node.js (for UI components)
+- Docker and Docker Compose
+- Go 1.25.0+ (for development)
+- Make
 
-### Installation
+### Start the Environment
 
 ```bash
-# Clone the repository
-git clone https://github.com/SebastienMelki/causality
-cd causality
+# Start all services (clean)
+make dev
 
-# Install Go dependencies
-go mod tidy
-
-# Install gomobile
-go install golang.org/x/mobile/cmd/gomobile@latest
-gomobile init
-
-# Install protoc-gen-go
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+# Or start without cleaning existing data
+make docker-up
 ```
 
-### Project Structure
+This starts:
+- HTTP Server: http://localhost:8080
+- NATS Monitoring: http://localhost:8222
+- MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
+- Trino: http://localhost:8085
+- Redash: http://localhost:5050 (admin@causality.local/admin123)
+
+### Send Test Events
+
+```bash
+# Send a single event
+make test-event
+
+# Send a batch of events
+make test-batch
+
+# Send 100 uniform events
+make test-load
+
+# Send random events with variation (better for graphs)
+make test-random
+```
+
+### Query Events
+
+```bash
+# Open Trino CLI
+make trino-cli
+
+# Sync partitions and count events
+make trino-sync
+make trino-count
+
+# View event statistics
+make trino-stats
+```
+
+Or use Redash at http://localhost:5050 with SQL:
+
+```sql
+SELECT
+  event_type,
+  count(*) AS event_count
+FROM hive.causality.events
+GROUP BY event_type
+ORDER BY event_count DESC
+```
+
+## API
+
+### Ingest Single Event
+
+```bash
+curl -X POST http://localhost:8080/v1/events/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": {
+      "appId": "my-app",
+      "deviceId": "device-001",
+      "screenView": {"screenName": "HomeScreen"}
+    }
+  }'
+```
+
+### Ingest Batch
+
+```bash
+curl -X POST http://localhost:8080/v1/events/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {"appId": "my-app", "deviceId": "d1", "screenView": {"screenName": "Home"}},
+      {"appId": "my-app", "deviceId": "d1", "buttonTap": {"buttonId": "login", "screenName": "Home"}}
+    ]
+  }'
+```
+
+### Event Types
+
+- `screenView`: Screen/page views
+- `screenExit`: Screen exit with duration
+- `buttonTap`: Button/UI interactions
+- `userLogin` / `userLogout`: Authentication events
+- `productView` / `addToCart` / `purchaseComplete`: E-commerce events
+- `appStart` / `appBackground` / `appForeground`: Lifecycle events
+- `networkChange`: Connectivity changes
+- `customEvent`: Custom events with arbitrary parameters
+
+## Project Structure
 
 ```
 causality/
 ├── cmd/
-│   ├── server/        # HTTP server application
-│   └── cli/           # Command-line tools
+│   ├── server/           # HTTP server
+│   └── warehouse-sink/   # NATS consumer → Parquet → S3
 ├── internal/
-│   ├── analysis/      # Behavioral analysis engine
-│   ├── events/        # Event processing logic
-│   └── storage/       # Event storage layer
-├── pkg/
-│   ├── sdk/           # Shared SDK code
-│   └── proto/         # Protocol buffer definitions
-├── mobile/            # Mobile SDK source
-├── wasm/              # WebAssembly SDK source
-├── ui/                # Event definition UI
-└── proto/             # Protocol buffer schemas
+│   ├── gateway/          # HTTP routing and handlers
+│   ├── nats/             # JetStream client
+│   └── warehouse/        # Parquet writer and S3 upload
+├── pkg/proto/            # Generated protobuf code
+├── proto/                # Protocol buffer definitions
+├── docker/
+│   ├── hive/             # Hive Metastore config
+│   ├── trino/            # Trino config
+│   ├── redash/           # Redash setup scripts
+│   └── postgres/         # PostgreSQL init
+├── sql/                  # Trino table definitions
+├── docker-compose.yml    # Development environment
+├── Dockerfile            # Multi-stage build
+└── Makefile              # Development commands
 ```
 
 ## Development
 
-### Building the Server
+### Build Locally
 
 ```bash
-go build -o bin/causality-server ./cmd/server
+# Build server binary
+make build-server
+
+# Build warehouse sink
+make build-sink
+
+# Build both
+make build
 ```
 
-### Generating Mobile SDK
+### Run Tests
 
 ```bash
-# For Android
-gomobile bind -target=android -o mobile/causality.aar ./mobile
-
-# For iOS
-gomobile bind -target=ios -o mobile/Causality.xcframework ./mobile
+make test
 ```
 
-### Building WASM SDK
+### Useful Commands
 
 ```bash
-GOOS=js GOARCH=wasm go build -o wasm/causality.wasm ./wasm
+make help           # Show all available commands
+make docker-logs    # Tail all service logs
+make docker-ps      # Show running containers
+make minio-ls       # List objects in MinIO
+make nats-info      # Show NATS server info
 ```
 
-### Compiling Protocol Buffers
+## Configuration
 
-```bash
-protoc --go_out=. --go-grpc_out=. proto/*.proto
-```
+### Environment Variables
 
-### Running Tests
+**HTTP Server:**
+- `HTTP_ADDR`: Listen address (default: `:8080`)
+- `NATS_URL`: NATS server URL (default: `nats://localhost:4222`)
 
-```bash
-go test ./...
-```
-
-## Usage
-
-### Server
-
-```bash
-# Start the HTTP server
-./bin/causality-server --port 8080
-```
-
-### Mobile Integration
-
-```swift
-// iOS Example
-import Causality
-
-let client = CausalityClient(serverAddress: "https://server:8080")
-client.sendEvent(CustomEvent(type: "user_action", data: eventData))
-```
-
-### Web Integration
-
-```javascript
-// Web Example
-import { CausalityClient } from './causality.js';
-
-const client = new CausalityClient('https://server:8080');
-await client.sendEvent({
-  type: 'user_action',
-  data: eventData
-});
-```
+**Warehouse Sink:**
+- `NATS_URL`: NATS server URL
+- `S3_ENDPOINT`: S3/MinIO endpoint
+- `S3_BUCKET`: Bucket name (default: `causality-events`)
+- `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`: Credentials
+- `BATCH_MAX_EVENTS`: Events per Parquet file (default: `1000`)
+- `BATCH_FLUSH_INTERVAL`: Max time before flush (default: `30s`)
 
 ## Contributing
 
