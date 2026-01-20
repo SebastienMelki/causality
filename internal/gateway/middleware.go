@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,7 +152,7 @@ func CORS(cfg CORSConfig) Middleware {
 
 			// Handle preflight requests
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Max-Age", string(rune(cfg.MaxAge)))
+				w.Header().Set("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
