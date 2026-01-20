@@ -215,6 +215,43 @@ test-load: ## Send 100 test events for load testing
 	done
 	@echo "Done! Sent 100 events"
 
+test-random: ## Send random events with variation (for realistic graphs)
+	@echo "Sending random events..."
+	@for round in $$(seq 1 20); do \
+		device=$$((RANDOM % 100)); \
+		screen_count=$$((RANDOM % 10 + 1)); \
+		for s in $$(seq 1 $$screen_count); do \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","screenView":{"screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
+		done; \
+		btn_count=$$((RANDOM % 8)); \
+		for b in $$(seq 1 $$btn_count); do \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","buttonTap":{"buttonId":"btn-'$$((RANDOM % 15))'","screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
+		done; \
+		if [ $$((RANDOM % 3)) -eq 0 ]; then \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","userLogin":{"userId":"user-'$$((RANDOM % 50))'","method":"email"}}}' > /dev/null; \
+		fi; \
+		if [ $$((RANDOM % 4)) -eq 0 ]; then \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","productView":{"productId":"prod-'$$((RANDOM % 30))'","productName":"Product","priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
+		fi; \
+		if [ $$((RANDOM % 6)) -eq 0 ]; then \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","addToCart":{"productId":"prod-'$$((RANDOM % 30))'","quantity":'$$((RANDOM % 5 + 1))',"priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
+		fi; \
+		if [ $$((RANDOM % 10)) -eq 0 ]; then \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","purchaseComplete":{"orderId":"order-'$$RANDOM'","totalCents":'$$((RANDOM % 50000 + 500))',"currency":"USD"}}}' > /dev/null; \
+		fi; \
+		curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
+			-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","appStart":{"isColdStart":'$$([ $$((RANDOM % 2)) -eq 0 ] && echo true || echo false)',"launchDurationMs":'$$((RANDOM % 2000 + 100))'}}}' > /dev/null; \
+		echo -n "."; \
+	done
+	@echo ""
+	@echo "Done! Sent random events with variation"
+
 health: ## Check server health
 	@curl -s http://localhost:8080/health | jq .
 
