@@ -1,0 +1,276 @@
+services:
+  # NATS server with JetStream enabled
+  nats:
+    image: nats:2.10-alpine
+    container_name: causality-nats
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # MinIO for S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: causality-minio
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # MinIO bucket initialization
+  minio-init:
+    image: minio/mc:latest
+    container_name: causality-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing myminio/causality-events;
+      mc anonymous set download myminio/causality-events;
+      exit 0;
+      "
+
+  # PostgreSQL for Hive Metastore and Redash
+  postgres:
+    image: postgres:16-alpine
+    container_name: causality-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-redash.sql:/docker-entrypoint-initdb.d/init-redash.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Hive Metastore (for schema registry)
+  hive-metastore:
+    image: apache/hive:4.0.0
+    container_name: causality-hive-metastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      hive-init-driver:
+        condition: service_completed_successfully
+    ports:
+      - "9083:9083"
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
+        -Djavax.jdo.option.ConnectionUserName=hive
+        -Djavax.jdo.option.ConnectionPassword=hive
+    volumes:
+      - ./docker/hive/core-site.xml:/opt/hive/conf/core-site.xml:ro
+      - hive-lib:/opt/hive/lib
+      - hive-warehouse:/opt/hive/data/warehouse
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9083"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # Download PostgreSQL JDBC driver and Hadoop AWS JARs for Hive
+  hive-init-driver:
+    image: alpine:latest
+    container_name: causality-hive-init-driver
+    volumes:
+      - hive-lib:/opt/hive/lib
+    command: >
+      sh -c "
+      apk add --no-cache curl &&
+      echo 'Downloading PostgreSQL driver...' &&
+      curl -L -o /opt/hive/lib/postgresql-42.7.4.jar https://jdbc.postgresql.org/download/postgresql-42.7.4.jar &&
+      echo 'Downloading Hadoop AWS...' &&
+      curl -L -o /opt/hive/lib/hadoop-aws-3.3.4.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar &&
+      echo 'Downloading AWS SDK bundle...' &&
+      curl -L -o /opt/hive/lib/aws-java-sdk-bundle-1.12.262.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar &&
+      chmod 644 /opt/hive/lib/*.jar &&
+      echo 'All JARs downloaded'
+      "
+
+  # Trino for SQL queries
+  trino:
+    image: trinodb/trino:444
+    container_name: causality-trino
+    hostname: trino
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    ports:
+      - "8085:8080"
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    volumes:
+      - ./docker/trino/etc:/etc/trino
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    restart: always
+
+  # Redis for Redash
+  redis:
+    image: redis:7-alpine
+    container_name: causality-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Redash database initialization
+  redash-init-db:
+    image: redash/redash:10.1.0.b50633
+    platform: linux/amd64
+    container_name: causality-redash-init-db
+    command: python manage.py database create_tables
+    env_file:
+      - ./docker/redash/.env
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_DATABASE_URL: postgresql://hive:hive@postgres:5432/redash
+      REDASH_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+    restart: "no"
+
+  # Redash for visualization
+  redash-server:
+    image: redash/redash:10.1.0.b50633
+    platform: linux/amd64
+    container_name: causality-redash
+    command: /app/entrypoint.sh
+    env_file:
+      - ./docker/redash/.env
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_DATABASE_URL: postgresql://hive:hive@postgres:5432/redash
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_ADMIN_NAME: Causality Admin
+      REDASH_ADMIN_EMAIL: admin@causality.local
+      REDASH_ADMIN_PASSWORD: admin123
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./docker/redash/entrypoint.sh:/app/entrypoint.sh:ro
+      - ./docker/redash/init-admin.sh:/app/init-admin.sh:ro
+    depends_on:
+      redash-init-db:
+        condition: service_started
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      trino:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redash-worker:
+    image: redash/redash:10.1.0.b50633
+    platform: linux/amd64
+    container_name: causality-redash-worker
+    command: worker
+    env_file:
+      - ./docker/redash/.env
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_DATABASE_URL: postgresql://hive:hive@postgres:5432/redash
+      REDASH_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+
+  # Causality HTTP Server
+  causality-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    container_name: causality-server
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_ADDR: ":8080"
+      NATS_URL: "nats://nats:4222"
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Warehouse Sink
+  warehouse-sink:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: warehouse-sink
+    container_name: causality-warehouse-sink
+    depends_on:
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NATS_URL: "nats://nats:4222"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_REGION: "us-east-1"
+      S3_BUCKET: "causality-events"
+      S3_ACCESS_KEY_ID: "minioadmin"
+      S3_SECRET_ACCESS_KEY: "minioadmin"
+      S3_USE_PATH_STYLE: "true"
+      BATCH_MAX_EVENTS: "10"
+      BATCH_FLUSH_INTERVAL: "30s"
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+
+volumes:
+  nats-data:
+  minio-data:
+  postgres-data:
+  hive-warehouse:
+  hive-lib:
+
+networks:
+  default:
+    name: causality-network

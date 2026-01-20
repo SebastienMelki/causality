@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  Hive core-site.xml configuration for S3/MinIO integration.
+  This file configures Hive to read Parquet files from MinIO.
+-->
+<configuration>
+  <!-- S3A filesystem implementation for MinIO -->
+  <property>
+    <name>fs.s3a.impl</name>
+    <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+  </property>
+
+  <!-- MinIO endpoint -->
+  <property>
+    <name>fs.s3a.endpoint</name>
+    <value>http://minio:9000</value>
+  </property>
+
+  <!-- MinIO credentials -->
+  <property>
+    <name>fs.s3a.access.key</name>
+    <value>minioadmin</value>
+  </property>
+  <property>
+    <name>fs.s3a.secret.key</name>
+    <value>minioadmin</value>
+  </property>
+
+  <!-- Path-style access for MinIO -->
+  <property>
+    <name>fs.s3a.path.style.access</name>
+    <value>true</value>
+  </property>
+
+  <!-- Connection settings -->
+  <property>
+    <name>fs.s3a.connection.ssl.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.s3a.connection.establish.timeout</name>
+    <value>5000</value>
+  </property>
+
+  <property>
+    <name>fs.s3a.connection.timeout</name>
+    <value>10000</value>
+  </property>
+
+  <!-- Buffer settings -->
+  <property>
+    <name>fs.s3a.buffer.dir</name>
+    <value>/tmp</value>
+  </property>
+
+  <property>
+    <name>fs.s3a.fast.upload</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.s3a.fast.upload.buffer</name>
+    <value>disk</value>
+  </property>
+</configuration>
