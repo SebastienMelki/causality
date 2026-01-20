@@ -78,7 +78,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
-*.env
+# Note: docker/redash/.env is tracked (dev config, no secrets)
 
 # Debug files
 debug
