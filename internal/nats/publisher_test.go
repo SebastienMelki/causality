@@ -3,6 +3,7 @@ package nats
 import (
 	"testing"
 
+	"github.com/SebastienMelki/causality/internal/events"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
@@ -122,8 +123,6 @@ func TestDeriveSubject(t *testing.T) {
 }
 
 func TestGetEventCategoryAndType(t *testing.T) {
-	publisher := &Publisher{}
-
 	tests := []struct {
 		name             string
 		event            *pb.EventEnvelope
@@ -192,7 +191,7 @@ func TestGetEventCategoryAndType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			category, eventType := publisher.getEventCategoryAndType(tt.event)
+			category, eventType := events.GetCategoryAndType(tt.event)
 			if category != tt.expectedCategory {
 				t.Errorf("category = %q, want %q", category, tt.expectedCategory)
 			}

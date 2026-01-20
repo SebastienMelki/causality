@@ -48,11 +48,11 @@ func (m *StreamManager) EnsureStream(ctx context.Context) (jetstream.Stream, err
 	}
 
 	// Try to get existing stream first
-	stream, err := m.js.Stream(ctx, m.config.Name)
+	_, err := m.js.Stream(ctx, m.config.Name)
 	if err == nil {
 		// Stream exists, update it
 		m.logger.Info("updating existing stream", "name", m.config.Name)
-		stream, err = m.js.UpdateStream(ctx, streamCfg)
+		stream, err := m.js.UpdateStream(ctx, streamCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update stream: %w", err)
 		}
@@ -62,7 +62,7 @@ func (m *StreamManager) EnsureStream(ctx context.Context) (jetstream.Stream, err
 
 	// Stream doesn't exist, create it
 	m.logger.Info("creating new stream", "name", m.config.Name, "subjects", m.config.Subjects)
-	stream, err = m.js.CreateStream(ctx, streamCfg)
+	stream, err := m.js.CreateStream(ctx, streamCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}

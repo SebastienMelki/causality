@@ -19,7 +19,7 @@ type Client struct {
 }
 
 // NewClient creates a new NATS client with the given configuration.
-func NewClient(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, error) {
+func NewClient(_ context.Context, cfg Config, logger *slog.Logger) (*Client, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -31,7 +31,7 @@ func NewClient(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, e
 		nats.MaxReconnects(cfg.MaxReconnects),
 		nats.ReconnectWait(cfg.ReconnectWait),
 		nats.Timeout(cfg.Timeout),
-		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			if err != nil {
 				logger.Warn("disconnected from NATS", "error", err)
 			}
@@ -39,10 +39,10 @@ func NewClient(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, e
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			logger.Info("reconnected to NATS", "url", nc.ConnectedUrl())
 		}),
-		nats.ClosedHandler(func(nc *nats.Conn) {
+		nats.ClosedHandler(func(_ *nats.Conn) {
 			logger.Info("NATS connection closed")
 		}),
-		nats.ErrorHandler(func(nc *nats.Conn, sub *nats.Subscription, err error) {
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 			logger.Error("NATS error", "error", err)
 		}),
 	}
@@ -106,7 +106,7 @@ func (c *Client) Close() {
 // HealthCheck performs a health check on the NATS connection.
 func (c *Client) HealthCheck(ctx context.Context) error {
 	if !c.conn.IsConnected() {
-		return fmt.Errorf("NATS is not connected, status: %s", c.conn.Status())
+		return fmt.Errorf("%w: status %s", ErrNotConnected, c.conn.Status())
 	}
 
 	// Check JetStream availability

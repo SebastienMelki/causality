@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"strings"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/SebastienMelki/causality/internal/events"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
@@ -47,7 +47,7 @@ func (p *Publisher) PublishEvent(ctx context.Context, event *pb.EventEnvelope) e
 	}
 
 	p.logger.Debug("event published",
-		"event_id", event.Id,
+		"event_id", event.GetId(),
 		"subject", subject,
 		"stream", ack.Stream,
 		"sequence", ack.Sequence,
@@ -64,7 +64,7 @@ func (p *Publisher) PublishEventBatch(ctx context.Context, events []*pb.EventEnv
 	for _, event := range events {
 		if err := p.PublishEvent(ctx, event); err != nil {
 			p.logger.Error("failed to publish event in batch",
-				"event_id", event.Id,
+				"event_id", event.GetId(),
 				"error", err,
 			)
 			// Continue with remaining events
@@ -74,14 +74,14 @@ func (p *Publisher) PublishEventBatch(ctx context.Context, events []*pb.EventEnv
 	}
 
 	if published < len(events) {
-		return published, fmt.Errorf("failed to publish %d of %d events", len(events)-published, len(events))
+		return published, fmt.Errorf("%w: %d of %d failed", ErrPartialPublish, len(events)-published, len(events))
 	}
 
 	return published, nil
 }
 
 // PublishAsync publishes an event asynchronously and returns a future for the ack.
-func (p *Publisher) PublishAsync(ctx context.Context, event *pb.EventEnvelope) (jetstream.PubAckFuture, error) {
+func (p *Publisher) PublishAsync(_ context.Context, event *pb.EventEnvelope) (jetstream.PubAckFuture, error) {
 	subject := p.deriveSubject(event)
 
 	data, err := proto.Marshal(event)
@@ -98,105 +98,19 @@ func (p *Publisher) PublishAsync(ctx context.Context, event *pb.EventEnvelope) (
 }
 
 // deriveSubject derives the NATS subject from the event envelope.
-// Format: {kind}.{app_id}.{category}.{type}
-// Example: events.myapp.screen.view
+// Format: {kind}.{app_id}.{category}.{type}.
 func (p *Publisher) deriveSubject(event *pb.EventEnvelope) string {
-	category, eventType := p.getEventCategoryAndType(event)
+	category, eventType := events.GetCategoryAndType(event)
 
 	// Sanitize app_id for subject (replace dots with underscores)
-	appID := strings.ReplaceAll(event.AppId, ".", "_")
+	appID := strings.ReplaceAll(event.GetAppId(), ".", "_")
+
+	// Sanitize custom event names for subject.
+	if category == events.CategoryCustom {
+		eventType = events.SanitizeSubjectName(eventType)
+	}
 
 	return fmt.Sprintf("events.%s.%s.%s", appID, category, eventType)
-}
-
-// getEventCategoryAndType returns the category and type of the event payload.
-func (p *Publisher) getEventCategoryAndType(event *pb.EventEnvelope) (category, eventType string) {
-	switch payload := event.Payload.(type) {
-	// User events
-	case *pb.EventEnvelope_UserLogin:
-		return "user", "login"
-	case *pb.EventEnvelope_UserLogout:
-		return "user", "logout"
-	case *pb.EventEnvelope_UserSignup:
-		return "user", "signup"
-	case *pb.EventEnvelope_UserProfileUpdate:
-		return "user", "profile_update"
-
-	// Screen events
-	case *pb.EventEnvelope_ScreenView:
-		return "screen", "view"
-	case *pb.EventEnvelope_ScreenExit:
-		return "screen", "exit"
-
-	// Interaction events
-	case *pb.EventEnvelope_ButtonTap:
-		return "interaction", "button_tap"
-	case *pb.EventEnvelope_SwipeGesture:
-		return "interaction", "swipe"
-	case *pb.EventEnvelope_ScrollEvent:
-		return "interaction", "scroll"
-	case *pb.EventEnvelope_TextInput:
-		return "interaction", "text_input"
-	case *pb.EventEnvelope_LongPress:
-		return "interaction", "long_press"
-	case *pb.EventEnvelope_DoubleTap:
-		return "interaction", "double_tap"
-
-	// Commerce events
-	case *pb.EventEnvelope_ProductView:
-		return "commerce", "product_view"
-	case *pb.EventEnvelope_AddToCart:
-		return "commerce", "add_to_cart"
-	case *pb.EventEnvelope_RemoveFromCart:
-		return "commerce", "remove_from_cart"
-	case *pb.EventEnvelope_CheckoutStart:
-		return "commerce", "checkout_start"
-	case *pb.EventEnvelope_CheckoutStep:
-		return "commerce", "checkout_step"
-	case *pb.EventEnvelope_PurchaseComplete:
-		return "commerce", "purchase_complete"
-	case *pb.EventEnvelope_PurchaseFailed:
-		return "commerce", "purchase_failed"
-
-	// System events
-	case *pb.EventEnvelope_AppStart:
-		return "system", "app_start"
-	case *pb.EventEnvelope_AppBackground:
-		return "system", "app_background"
-	case *pb.EventEnvelope_AppForeground:
-		return "system", "app_foreground"
-	case *pb.EventEnvelope_AppCrash:
-		return "system", "app_crash"
-	case *pb.EventEnvelope_NetworkChange:
-		return "system", "network_change"
-	case *pb.EventEnvelope_PermissionRequest:
-		return "system", "permission_request"
-	case *pb.EventEnvelope_PermissionResult:
-		return "system", "permission_result"
-	case *pb.EventEnvelope_MemoryWarning:
-		return "system", "memory_warning"
-	case *pb.EventEnvelope_BatteryChange:
-		return "system", "battery_change"
-
-	// Custom events
-	case *pb.EventEnvelope_CustomEvent:
-		if payload.CustomEvent != nil {
-			// Sanitize custom event name
-			name := strings.ToLower(payload.CustomEvent.EventName)
-			name = strings.ReplaceAll(name, " ", "_")
-			name = strings.ReplaceAll(name, ".", "_")
-			return "custom", name
-		}
-		return "custom", "unknown"
-
-	default:
-		// Fallback: use reflection to get type name
-		if event.Payload != nil {
-			t := reflect.TypeOf(event.Payload)
-			return "unknown", strings.ToLower(t.Elem().Name())
-		}
-		return "unknown", "unknown"
-	}
 }
 
 // DeriveSubjectForTest exposes subject derivation for testing.
