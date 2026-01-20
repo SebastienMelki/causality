@@ -24,18 +24,25 @@ Causality collects events from mobile and web applications, stores them in a dat
               │    NATS     │ JetStream
               └──────┬──────┘
                      │
-              ┌──────▼──────┐
-              │  Warehouse  │ Parquet files
-              │    Sink     │ → MinIO (S3)
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │    Trino    │ SQL Analytics
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │   Redash    │ Visualization
-              └─────────────┘
+         ┌───────────┴───────────┐
+         │                       │
+  ┌──────▼──────┐         ┌──────▼──────┐
+  │  Warehouse  │         │  Reaction   │
+  │    Sink     │         │   Engine    │
+  └──────┬──────┘         └──────┬──────┘
+         │                       │
+  ┌──────▼──────┐         ┌──────▼──────┐
+  │   MinIO     │         │  Webhooks/  │
+  │  (Parquet)  │         │   Alerts    │
+  └──────┬──────┘         └─────────────┘
+         │
+  ┌──────▼──────┐
+  │    Trino    │ SQL Analytics
+  └──────┬──────┘
+         │
+  ┌──────▼──────┐
+  │   Redash    │ Visualization
+  └─────────────┘
 ```
 
 ### Components
@@ -43,6 +50,7 @@ Causality collects events from mobile and web applications, stores them in a dat
 - **HTTP Server**: RESTful API for event ingestion (`/v1/events/ingest`, `/v1/events/batch`)
 - **NATS JetStream**: Event streaming and reliable delivery
 - **Warehouse Sink**: Consumes events, writes Parquet files to S3
+- **Reaction Engine**: Rule evaluation, anomaly detection, webhook delivery
 - **MinIO**: S3-compatible object storage for event data
 - **Hive Metastore**: Schema registry for Trino
 - **Trino**: SQL query engine for analytics on Parquet files
@@ -160,12 +168,14 @@ curl -X POST http://localhost:8080/v1/events/batch \
 causality/
 ├── cmd/
 │   ├── server/           # HTTP server
-│   └── warehouse-sink/   # NATS consumer → Parquet → S3
+│   ├── warehouse-sink/   # NATS consumer → Parquet → S3
+│   └── reaction-engine/  # Rule evaluation and anomaly detection
 ├── internal/
 │   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
-│   └── warehouse/        # Parquet writer and S3 upload
+│   ├── warehouse/        # Parquet writer and S3 upload
+│   └── reaction/         # Rule engine, anomaly detection, webhooks
 ├── pkg/proto/            # Generated protobuf code
 ├── proto/                # Protocol buffer definitions
 ├── docker/
@@ -190,7 +200,10 @@ make build-server
 # Build warehouse sink
 make build-sink
 
-# Build both
+# Build reaction engine
+make build-reaction
+
+# Build all
 make build
 ```
 
@@ -225,6 +238,14 @@ make nats-info      # Show NATS server info
 - `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`: Credentials
 - `BATCH_MAX_EVENTS`: Events per Parquet file (default: `1000`)
 - `BATCH_FLUSH_INTERVAL`: Max time before flush (default: `30s`)
+
+**Reaction Engine:**
+- `NATS_URL`: NATS server URL
+- `DATABASE_HOST` / `DATABASE_PORT`: PostgreSQL connection
+- `DATABASE_USER` / `DATABASE_PASSWORD`: PostgreSQL credentials
+- `DATABASE_NAME`: Database name (default: `reaction_engine`)
+- `ENGINE_RULE_REFRESH_INTERVAL`: Rule cache refresh interval (default: `30s`)
+- `DISPATCHER_WORKERS`: Webhook delivery workers (default: `5`)
 
 ## Contributing
 
