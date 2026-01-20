@@ -32,46 +32,46 @@ func NewEventService(publisher *nats.Publisher, logger *slog.Logger) *EventServi
 
 // IngestEvent handles single event ingestion.
 func (s *EventService) IngestEvent(ctx context.Context, req *pb.IngestEventRequest) (*pb.IngestEventResponse, error) {
-	if req.Event == nil {
-		return nil, fmt.Errorf("event is required")
+	if req.GetEvent() == nil {
+		return nil, ErrEventRequired
 	}
 
 	// Enrich envelope with server-generated values
-	s.enrichEnvelope(req.Event)
+	s.enrichEnvelope(req.GetEvent())
 
 	// Publish to NATS
-	if err := s.publisher.PublishEvent(ctx, req.Event); err != nil {
+	if err := s.publisher.PublishEvent(ctx, req.GetEvent()); err != nil {
 		s.logger.Error("failed to publish event",
-			"event_id", req.Event.Id,
+			"event_id", req.GetEvent().GetId(),
 			"error", err,
 		)
 		return nil, fmt.Errorf("failed to publish event: %w", err)
 	}
 
 	s.logger.Debug("event ingested",
-		"event_id", req.Event.Id,
-		"app_id", req.Event.AppId,
+		"event_id", req.GetEvent().GetId(),
+		"app_id", req.GetEvent().GetAppId(),
 	)
 
 	return &pb.IngestEventResponse{
-		EventId: req.Event.Id,
+		EventId: req.GetEvent().GetId(),
 		Status:  "accepted",
 	}, nil
 }
 
 // IngestEventBatch handles batch event ingestion.
 func (s *EventService) IngestEventBatch(ctx context.Context, req *pb.IngestEventBatchRequest) (*pb.IngestEventBatchResponse, error) {
-	if len(req.Events) == 0 {
-		return nil, fmt.Errorf("at least one event is required")
+	if len(req.GetEvents()) == 0 {
+		return nil, ErrAtLeastOneEvent
 	}
 
-	results := make([]*pb.EventResult, len(req.Events))
+	results := make([]*pb.EventResult, len(req.GetEvents()))
 	acceptedCount := int32(0)
 	rejectedCount := int32(0)
 
-	for i, event := range req.Events {
+	for i, event := range req.GetEvents() {
 		result := &pb.EventResult{
-			Index: int32(i),
+			Index: int32(i), //nolint:gosec // Index is bounded by batch size which is well under int32 max.
 		}
 
 		// Validate and enrich
@@ -92,11 +92,11 @@ func (s *EventService) IngestEventBatch(ctx context.Context, req *pb.IngestEvent
 			rejectedCount++
 			s.logger.Warn("failed to publish event in batch",
 				"index", i,
-				"event_id", event.Id,
+				"event_id", event.GetId(),
 				"error", err,
 			)
 		} else {
-			result.EventId = event.Id
+			result.EventId = event.GetId()
 			result.Status = "accepted"
 			acceptedCount++
 		}
@@ -105,7 +105,7 @@ func (s *EventService) IngestEventBatch(ctx context.Context, req *pb.IngestEvent
 	}
 
 	s.logger.Info("batch ingestion complete",
-		"total", len(req.Events),
+		"total", len(req.GetEvents()),
 		"accepted", acceptedCount,
 		"rejected", rejectedCount,
 	)
@@ -120,12 +120,12 @@ func (s *EventService) IngestEventBatch(ctx context.Context, req *pb.IngestEvent
 // enrichEnvelope adds server-generated values to the event envelope.
 func (s *EventService) enrichEnvelope(event *pb.EventEnvelope) {
 	// Generate UUID v7 if not provided (time-sortable)
-	if event.Id == "" {
+	if event.GetId() == "" {
 		event.Id = uuid.Must(uuid.NewV7()).String()
 	}
 
 	// Set timestamp if not provided
-	if event.TimestampMs == 0 {
+	if event.GetTimestampMs() == 0 {
 		event.TimestampMs = time.Now().UnixMilli()
 	}
 }

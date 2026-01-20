@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -74,7 +75,7 @@ func NewServer(cfg Config, natsClient *nats.Client, publisher *nats.Publisher, l
 // Start starts the HTTP server.
 func (s *Server) Start() error {
 	s.logger.Info("starting HTTP server", "addr", s.config.Addr)
-	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server error: %w", err)
 	}
 	return nil
@@ -88,28 +89,34 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-// handleHealth handles GET /health
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+// handleHealth handles GET /health.
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode health response", "error", err)
+	}
 }
 
-// handleReady handles GET /ready
+// handleReady handles GET /ready.
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := s.natsClient.HealthCheck(r.Context()); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		if encErr := json.NewEncoder(w).Encode(map[string]string{
 			"status": "not_ready",
 			"error":  err.Error(),
-		})
+		}); encErr != nil {
+			s.logger.Error("failed to encode not_ready response", "error", encErr)
+		}
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":    "ready",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode ready response", "error", err)
+	}
 }
