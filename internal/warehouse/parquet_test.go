@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SebastienMelki/causality/internal/events"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
@@ -145,7 +146,7 @@ func TestEventRowFromProto(t *testing.T) {
 			}
 
 			// Check device context if present
-			if tt.event.DeviceContext != nil {
+			if tt.event.GetDeviceContext() != nil {
 				if row.Platform != tt.wantRow.Platform {
 					t.Errorf("Platform = %q, want %q", row.Platform, tt.wantRow.Platform)
 				}
@@ -277,7 +278,7 @@ func TestGetEventCategoryAndType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			category, eventType := getEventCategoryAndType(tt.event)
+			category, eventType := events.GetCategoryAndType(tt.event)
 			if category != tt.expectedCategory {
 				t.Errorf("category = %q, want %q", category, tt.expectedCategory)
 			}

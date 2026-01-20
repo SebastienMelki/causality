@@ -9,6 +9,7 @@ import (
 	"github.com/parquet-go/parquet-go"
 	"github.com/parquet-go/parquet-go/compress"
 
+	"github.com/SebastienMelki/causality/internal/events"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
@@ -56,11 +57,11 @@ type EventRow struct {
 // EventRowFromProto converts a protobuf EventEnvelope to an EventRow.
 func EventRowFromProto(event *pb.EventEnvelope, year, month, day, hour int) EventRow {
 	row := EventRow{
-		ID:            event.Id,
-		AppID:         event.AppId,
-		DeviceID:      event.DeviceId,
-		TimestampMS:   event.TimestampMs,
-		CorrelationID: event.CorrelationId,
+		ID:            event.GetId(),
+		AppID:         event.GetAppId(),
+		DeviceID:      event.GetDeviceId(),
+		TimestampMS:   event.GetTimestampMs(),
+		CorrelationID: event.GetCorrelationId(),
 		Year:          year,
 		Month:         month,
 		Day:           day,
@@ -68,25 +69,25 @@ func EventRowFromProto(event *pb.EventEnvelope, year, month, day, hour int) Even
 	}
 
 	// Extract event category and type
-	row.EventCategory, row.EventType = getEventCategoryAndType(event)
+	row.EventCategory, row.EventType = events.GetCategoryAndType(event)
 
 	// Extract device context
-	if ctx := event.DeviceContext; ctx != nil {
-		row.Platform = ctx.Platform.String()
-		row.OSVersion = ctx.OsVersion
-		row.AppVersion = ctx.AppVersion
-		row.BuildNumber = ctx.BuildNumber
-		row.DeviceModel = ctx.DeviceModel
-		row.Manufacturer = ctx.Manufacturer
-		row.ScreenWidth = ctx.ScreenWidth
-		row.ScreenHeight = ctx.ScreenHeight
-		row.Locale = ctx.Locale
-		row.Timezone = ctx.Timezone
-		row.NetworkType = ctx.NetworkType.String()
-		row.Carrier = ctx.Carrier
-		row.IsJailbroken = ctx.IsJailbroken
-		row.IsEmulator = ctx.IsEmulator
-		row.SDKVersion = ctx.SdkVersion
+	if ctx := event.GetDeviceContext(); ctx != nil {
+		row.Platform = ctx.GetPlatform().String()
+		row.OSVersion = ctx.GetOsVersion()
+		row.AppVersion = ctx.GetAppVersion()
+		row.BuildNumber = ctx.GetBuildNumber()
+		row.DeviceModel = ctx.GetDeviceModel()
+		row.Manufacturer = ctx.GetManufacturer()
+		row.ScreenWidth = ctx.GetScreenWidth()
+		row.ScreenHeight = ctx.GetScreenHeight()
+		row.Locale = ctx.GetLocale()
+		row.Timezone = ctx.GetTimezone()
+		row.NetworkType = ctx.GetNetworkType().String()
+		row.Carrier = ctx.GetCarrier()
+		row.IsJailbroken = ctx.GetIsJailbroken()
+		row.IsEmulator = ctx.GetIsEmulator()
+		row.SDKVersion = ctx.GetSdkVersion()
 	}
 
 	// Serialize payload to JSON
@@ -95,99 +96,14 @@ func EventRowFromProto(event *pb.EventEnvelope, year, month, day, hour int) Even
 	return row
 }
 
-// getEventCategoryAndType extracts category and type from event payload.
-func getEventCategoryAndType(event *pb.EventEnvelope) (category, eventType string) {
-	switch payload := event.Payload.(type) {
-	// User events
-	case *pb.EventEnvelope_UserLogin:
-		return "user", "login"
-	case *pb.EventEnvelope_UserLogout:
-		return "user", "logout"
-	case *pb.EventEnvelope_UserSignup:
-		return "user", "signup"
-	case *pb.EventEnvelope_UserProfileUpdate:
-		return "user", "profile_update"
-
-	// Screen events
-	case *pb.EventEnvelope_ScreenView:
-		return "screen", "view"
-	case *pb.EventEnvelope_ScreenExit:
-		return "screen", "exit"
-
-	// Interaction events
-	case *pb.EventEnvelope_ButtonTap:
-		return "interaction", "button_tap"
-	case *pb.EventEnvelope_SwipeGesture:
-		return "interaction", "swipe"
-	case *pb.EventEnvelope_ScrollEvent:
-		return "interaction", "scroll"
-	case *pb.EventEnvelope_TextInput:
-		return "interaction", "text_input"
-	case *pb.EventEnvelope_LongPress:
-		return "interaction", "long_press"
-	case *pb.EventEnvelope_DoubleTap:
-		return "interaction", "double_tap"
-
-	// Commerce events
-	case *pb.EventEnvelope_ProductView:
-		return "commerce", "product_view"
-	case *pb.EventEnvelope_AddToCart:
-		return "commerce", "add_to_cart"
-	case *pb.EventEnvelope_RemoveFromCart:
-		return "commerce", "remove_from_cart"
-	case *pb.EventEnvelope_CheckoutStart:
-		return "commerce", "checkout_start"
-	case *pb.EventEnvelope_CheckoutStep:
-		return "commerce", "checkout_step"
-	case *pb.EventEnvelope_PurchaseComplete:
-		return "commerce", "purchase_complete"
-	case *pb.EventEnvelope_PurchaseFailed:
-		return "commerce", "purchase_failed"
-
-	// System events
-	case *pb.EventEnvelope_AppStart:
-		return "system", "app_start"
-	case *pb.EventEnvelope_AppBackground:
-		return "system", "app_background"
-	case *pb.EventEnvelope_AppForeground:
-		return "system", "app_foreground"
-	case *pb.EventEnvelope_AppCrash:
-		return "system", "app_crash"
-	case *pb.EventEnvelope_NetworkChange:
-		return "system", "network_change"
-	case *pb.EventEnvelope_PermissionRequest:
-		return "system", "permission_request"
-	case *pb.EventEnvelope_PermissionResult:
-		return "system", "permission_result"
-	case *pb.EventEnvelope_MemoryWarning:
-		return "system", "memory_warning"
-	case *pb.EventEnvelope_BatteryChange:
-		return "system", "battery_change"
-
-	// Custom events
-	case *pb.EventEnvelope_CustomEvent:
-		if payload.CustomEvent != nil {
-			return "custom", payload.CustomEvent.EventName
-		}
-		return "custom", "unknown"
-
-	default:
-		if event.Payload != nil {
-			t := reflect.TypeOf(event.Payload)
-			return "unknown", t.Elem().Name()
-		}
-		return "unknown", "unknown"
-	}
-}
-
 // serializePayload serializes the event payload to JSON.
 func serializePayload(event *pb.EventEnvelope) string {
-	if event.Payload == nil {
+	if event.GetPayload() == nil {
 		return "{}"
 	}
 
 	// Get the payload value using reflection
-	payloadValue := reflect.ValueOf(event.Payload)
+	payloadValue := reflect.ValueOf(event.GetPayload())
 	if payloadValue.Kind() == reflect.Ptr && !payloadValue.IsNil() {
 		payloadValue = payloadValue.Elem()
 		if payloadValue.NumField() > 0 {
@@ -217,7 +133,7 @@ func NewParquetWriter(cfg ParquetConfig) *ParquetWriter {
 // Write writes a batch of event rows to Parquet format and returns the bytes.
 func (w *ParquetWriter) Write(rows []EventRow) ([]byte, error) {
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("no rows to write")
+		return nil, ErrNoRowsToWrite
 	}
 
 	var buf bytes.Buffer

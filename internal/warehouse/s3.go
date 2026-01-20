@@ -106,7 +106,7 @@ func (c *S3Client) Upload(ctx context.Context, key string, data []byte) error {
 }
 
 // GenerateKey generates an S3 key for the given partition.
-// Format: {prefix}/app_id={app}/year={y}/month={m}/day={d}/hour={h}/events_{uuid}.parquet
+// Format: {prefix}/app_id={app}/year={y}/month={m}/day={d}/hour={h}/events_{uuid}.parquet.
 func (c *S3Client) GenerateKey(appID string, year, month, day, hour int) string {
 	fileUUID := uuid.New().String()
 	return fmt.Sprintf(

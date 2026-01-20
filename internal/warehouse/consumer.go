@@ -2,6 +2,7 @@ package warehouse
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -95,7 +96,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 				// Fetch messages
 				msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(5*time.Second))
 				if err != nil {
-					if err != context.DeadlineExceeded {
+					if !errors.Is(err, context.DeadlineExceeded) {
 						c.logger.Error("failed to fetch messages", "error", err)
 					}
 					continue
@@ -179,6 +180,9 @@ func (c *Consumer) flushTimer(ctx context.Context) {
 }
 
 // flush writes the current batch to S3.
+// Errors from individual partitions are logged but do not stop the flush.
+//
+//nolint:unparam // Always returns nil by design; errors are logged per-partition.
 func (c *Consumer) flush(ctx context.Context) error {
 	c.mu.Lock()
 	if len(c.batch) == 0 {
@@ -230,9 +234,9 @@ func (c *Consumer) groupByPartition(events []*pb.EventEnvelope) map[partitionKey
 	partitions := make(map[partitionKey][]*pb.EventEnvelope)
 
 	for _, event := range events {
-		t := time.UnixMilli(event.TimestampMs).UTC()
+		t := time.UnixMilli(event.GetTimestampMs()).UTC()
 		key := partitionKey{
-			AppID: event.AppId,
+			AppID: event.GetAppId(),
 			Year:  t.Year(),
 			Month: int(t.Month()),
 			Day:   t.Day(),
