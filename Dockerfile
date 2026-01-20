@@ -24,6 +24,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/causality-server 
 # Build warehouse-sink
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/warehouse-sink ./cmd/warehouse-sink
 
+# Build reaction-engine
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/reaction-engine ./cmd/reaction-engine
+
 
 # Server image
 FROM alpine:3.19 AS server
@@ -53,3 +56,17 @@ USER appuser
 COPY --from=builder /bin/warehouse-sink /usr/local/bin/warehouse-sink
 
 ENTRYPOINT ["/usr/local/bin/warehouse-sink"]
+
+
+# Reaction engine image
+FROM alpine:3.19 AS reaction-engine
+
+RUN apk add --no-cache ca-certificates
+
+# Create non-root user
+RUN adduser -D -g '' appuser
+USER appuser
+
+COPY --from=builder /bin/reaction-engine /usr/local/bin/reaction-engine
+
+ENTRYPOINT ["/usr/local/bin/reaction-engine"]

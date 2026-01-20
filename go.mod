@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.76.1
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/google/uuid v1.6.0
+	github.com/lib/pq v1.10.9
 	github.com/nats-io/nats.go v1.39.1
 	github.com/parquet-go/parquet-go v0.25.0
 	golang.org/x/time v0.9.0

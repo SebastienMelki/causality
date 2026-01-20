@@ -18,7 +18,7 @@ help: ## Show this help message
 # =============================================================================
 # Core Development
 # =============================================================================
-build: build-server build-sink ## Build all binaries
+build: build-server build-sink build-reaction ## Build all binaries
 
 build-server: ## Build HTTP server binary
 	@echo "Building HTTP server..."
@@ -29,6 +29,11 @@ build-sink: ## Build warehouse sink binary
 	@echo "Building warehouse sink..."
 	@mkdir -p bin
 	@go build -o bin/warehouse-sink ./cmd/warehouse-sink
+
+build-reaction: ## Build reaction engine binary
+	@echo "Building reaction engine..."
+	@mkdir -p bin
+	@go build -o bin/reaction-engine ./cmd/reaction-engine
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
@@ -41,6 +46,10 @@ run-server: build-server ## Run HTTP server locally
 run-sink: build-sink ## Run warehouse sink locally
 	@echo "Running warehouse sink..."
 	@./bin/warehouse-sink
+
+run-reaction: build-reaction ## Run reaction engine locally
+	@echo "Running reaction engine..."
+	@./bin/reaction-engine
 
 # =============================================================================
 # Testing
@@ -162,6 +171,9 @@ docker-logs-sink: ## View warehouse sink logs
 
 docker-logs-trino: ## View Trino logs
 	@docker-compose logs -f trino
+
+docker-logs-reaction: ## View reaction engine logs
+	@docker-compose logs -f reaction-engine
 
 docker-clean: ## Remove all containers and volumes
 	@echo "Cleaning Docker resources..."
@@ -361,8 +373,16 @@ dev-wait: ## Wait for services to be healthy
 
 dev-logs: docker-logs ## Tail all logs (alias)
 
-dev-rebuild: ## Rebuild and restart only the Go services
-	@docker-compose up -d --build --force-recreate causality-server warehouse-sink
+dev-rebuild: ## Rebuild and restart only the Go services (uses cache)
+	@docker-compose up -d --build --force-recreate causality-server warehouse-sink reaction-engine
+
+dev-rebuild-clean: ## Rebuild Go services from scratch (no cache)
+	@echo "Rebuilding Go services without cache..."
+	@docker-compose build --no-cache causality-server warehouse-sink reaction-engine
+	@docker-compose up -d --force-recreate causality-server warehouse-sink reaction-engine
+	@echo "Waiting for services..."
+	@sleep 5
+	@echo "Services rebuilt and restarted"
 
 api-docs: ## Open OpenAPI spec
 	@echo "OpenAPI spec: api/openapi/EventService.openapi.yaml"

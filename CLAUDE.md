@@ -45,12 +45,14 @@ make trino-stats     # View event statistics
 - **Stop environment**: `make docker-down`
 - **View logs**: `make docker-logs`
 - **Rebuild Go services**: `make dev-rebuild`
+- **Rebuild Go services (no cache)**: `make dev-rebuild-clean`
 - **Clean everything**: `make docker-clean`
 
 ### Building
 - **Build all**: `make build`
 - **Build server**: `make build-server`
 - **Build warehouse sink**: `make build-sink`
+- **Build reaction engine**: `make build-reaction`
 
 ### Testing
 - **Run tests**: `make test`
@@ -90,12 +92,14 @@ make trino-stats     # View event statistics
 causality/
 ├── cmd/
 │   ├── server/           # HTTP server for event ingestion
-│   └── warehouse-sink/   # NATS consumer → Parquet → S3
+│   ├── warehouse-sink/   # NATS consumer → Parquet → S3
+│   └── reaction-engine/  # Rule evaluation and anomaly detection
 ├── internal/
 │   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
-│   └── warehouse/        # Parquet writer and S3 upload
+│   ├── warehouse/        # Parquet writer and S3 upload
+│   └── reaction/         # Rule engine, anomaly detection, webhooks
 ├── pkg/proto/            # Generated protobuf code
 ├── proto/                # Protocol buffer definitions
 ├── docker/
@@ -113,11 +117,13 @@ causality/
 
 ### Data Flow
 ```
-Mobile/Web Apps → HTTP Server → NATS JetStream → Warehouse Sink → MinIO (Parquet)
-                                                                        ↓
-                                                              Hive Metastore
-                                                                        ↓
-                                                                    Trino → Redash
+Mobile/Web Apps → HTTP Server → NATS JetStream ─┬→ Warehouse Sink → MinIO (Parquet)
+                                                │                          ↓
+                                                │                 Hive Metastore
+                                                │                          ↓
+                                                │                      Trino → Redash
+                                                │
+                                                └→ Reaction Engine → Webhooks/Alerts
 ```
 
 1. **Event Ingestion**: Apps POST events to HTTP server
@@ -127,6 +133,7 @@ Mobile/Web Apps → HTTP Server → NATS JetStream → Warehouse Sink → MinIO 
 5. **Catalog**: Hive Metastore tracks table schema
 6. **Querying**: Trino queries Parquet files via Hive connector
 7. **Visualization**: Redash dashboards
+8. **Reaction**: Reaction engine evaluates rules and detects anomalies
 
 ### Key Components
 
@@ -141,6 +148,13 @@ Mobile/Web Apps → HTTP Server → NATS JetStream → Warehouse Sink → MinIO 
 - Batches events (configurable size/interval)
 - Writes Parquet files to S3
 - Hive-style partitioning: `app_id/year/month/day/hour`
+
+#### Reaction Engine (`cmd/reaction-engine`)
+- Consumes events from NATS JetStream
+- Evaluates rules with JSONPath conditions
+- Detects anomalies (threshold, rate, count-based)
+- Delivers webhooks with retry and backoff
+- Stores rules and configs in PostgreSQL
 
 #### Trino Configuration
 - Uses Hive connector with S3 storage

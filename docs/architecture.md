@@ -22,18 +22,25 @@ Causality is an event analytics platform that collects behavioral events from mo
               │    NATS     │ JetStream
               └──────┬──────┘
                      │
-              ┌──────▼──────┐
-              │  Warehouse  │ Parquet files
-              │    Sink     │ → MinIO (S3)
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │    Trino    │ SQL Analytics
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │   Redash    │ Visualization
-              └─────────────┘
+         ┌───────────┴───────────┐
+         │                       │
+  ┌──────▼──────┐         ┌──────▼──────┐
+  │  Warehouse  │         │  Reaction   │
+  │    Sink     │         │   Engine    │
+  └──────┬──────┘         └──────┬──────┘
+         │                       │
+  ┌──────▼──────┐         ┌──────▼──────┐
+  │   MinIO     │         │  Webhooks/  │
+  │  (Parquet)  │         │   Alerts    │
+  └──────┬──────┘         └─────────────┘
+         │
+  ┌──────▼──────┐
+  │    Trino    │ SQL Analytics
+  └──────┬──────┘
+         │
+  ┌──────▼──────┐
+  │   Redash    │ Visualization
+  └─────────────┘
 ```
 
 ## Components
@@ -81,14 +88,47 @@ Processes events from NATS and writes to storage:
 - `BATCH_MAX_EVENTS`: Events per Parquet file (default: `1000`)
 - `BATCH_FLUSH_INTERVAL`: Max time before flush (default: `30s`)
 
-### 4. MinIO
+### 4. Reaction Engine (`cmd/reaction-engine`)
+
+Real-time event processing and alerting:
+- Consumes events from NATS JetStream
+- Evaluates rules against incoming events
+- Detects anomalies (threshold, rate, count-based)
+- Delivers webhooks with retry and exponential backoff
+- Stores configuration in PostgreSQL
+
+**Rule Evaluation:**
+- JSONPath-based condition matching
+- Operators: eq, ne, gt, gte, lt, lte, contains, regex, in, exists
+- Actions: trigger webhooks, publish to NATS subjects
+
+**Anomaly Detection:**
+- **Threshold**: Alert when values exceed min/max bounds
+- **Rate**: Alert when event rate exceeds max per minute
+- **Count**: Alert when event count in window exceeds threshold
+
+**Webhook Delivery:**
+- Worker pool (default 5 workers)
+- Exponential backoff: 1s, 2s, 4s, 8s... (max 5m)
+- Max 5 attempts before dead-lettering
+- Auth types: none, basic, bearer, HMAC signature
+
+**Configuration:**
+- `NATS_URL`: NATS server URL
+- `DATABASE_HOST` / `DATABASE_PORT`: PostgreSQL connection
+- `DATABASE_USER` / `DATABASE_PASSWORD`: PostgreSQL credentials
+- `DATABASE_NAME`: Database name (default: `reaction_engine`)
+- `ENGINE_RULE_REFRESH_INTERVAL`: Rule cache refresh (default: `30s`)
+- `DISPATCHER_WORKERS`: Webhook workers (default: `5`)
+
+### 5. MinIO
 
 S3-compatible object storage:
 - Stores Parquet files
 - Bucket: `causality-events`
 - Path pattern: `events/app_id=X/year=Y/month=M/day=D/hour=H/*.parquet`
 
-### 5. Hive Metastore
+### 6. Hive Metastore
 
 Schema registry for Trino:
 - Stores table definitions
@@ -96,7 +136,7 @@ Schema registry for Trino:
 - Uses PostgreSQL as backing store
 - Configured with S3 (hadoop-aws) for path validation
 
-### 6. Trino
+### 7. Trino
 
 SQL query engine:
 - Queries Parquet files directly from S3
@@ -116,7 +156,7 @@ hive.s3.endpoint=http://minio:9000
 hive.s3.path-style-access=true
 ```
 
-### 7. Redash
+### 8. Redash
 
 Data visualization and dashboards:
 - Auto-configured Trino data source
@@ -131,17 +171,23 @@ Data visualization and dashboards:
    - Server validates and enriches event
    - Event published to NATS JetStream
 
-2. **Processing**
+2. **Processing (Warehouse)**
    - Warehouse sink consumes from NATS
    - Events batched by size or time
    - Converted to Parquet format
 
-3. **Storage**
+3. **Processing (Reaction)**
+   - Reaction engine consumes from NATS
+   - Events evaluated against rules
+   - Anomalies detected based on configs
+   - Webhooks triggered for matches
+
+4. **Storage**
    - Parquet file uploaded to MinIO
    - Partitioned by app_id/year/month/day/hour
    - Hive metastore notified of new partition
 
-4. **Query**
+5. **Query**
    - User runs SQL via Trino or Redash
    - Trino reads partition metadata from Hive
    - Parquet files fetched from MinIO
@@ -200,5 +246,6 @@ This enables:
 - **HTTP Server**: Stateless, horizontally scalable
 - **NATS**: Clusterable for HA
 - **Warehouse Sink**: Can run multiple instances with consumer groups
+- **Reaction Engine**: Can run multiple instances with consumer groups
 - **MinIO**: Supports distributed mode
 - **Trino**: Supports worker nodes for distributed queries
