@@ -1,6 +1,8 @@
 module github.com/SebastienMelki/causality
 
-go 1.25.0
+go 1.24.7
+
+toolchain go1.24.12
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20251209175733-2a1774d88802.1

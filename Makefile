@@ -1,4 +1,4 @@
-.PHONY: help build clean test lint install generate mobile wasm \
+.PHONY: help build clean test lint lint-fix install generate mobile wasm \
         install-tools install-sebuf buf-generate buf-lint \
         build-server build-sink docker-up docker-down docker-build \
         test-unit test-e2e test-coverage
@@ -73,6 +73,10 @@ lint: ## Run linter
 	@echo "Running linter..."
 	@golangci-lint run ./...
 
+lint-fix: ## Run linter with auto-fix
+	@echo "Running linter with auto-fix..."
+	@golangci-lint run --fix ./...
+
 fmt: ## Format code
 	@echo "Formatting code..."
 	@go fmt ./...
@@ -95,7 +99,7 @@ install-tools: ## Install development tools
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	@go install github.com/bufbuild/buf/cmd/buf@latest
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
 install-sebuf: ## Install sebuf plugins for HTTP handler generation
 	@echo "Installing sebuf plugins..."
