@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Causality is a behavioral analysis system that collects events from mobile (iOS/Android) and web applications, stores them in a data warehouse, and enables SQL-based analytics for behavioral pattern analysis and anomaly detection.
 
 **Core Stack:**
-- **Go 1.25.0** - Backend services
+- **Go 1.24+** - Backend services
 - **Protocol Buffers** - Event definitions and API contracts
 - **NATS JetStream** - Event streaming and reliable delivery
 - **MinIO** - S3-compatible object storage
@@ -74,6 +74,7 @@ make trino-stats     # View event statistics
 ### Code Quality
 - **Format code**: `make fmt`
 - **Run linter**: `make lint`
+- **Run linter with auto-fix**: `make lint-fix`
 - **Run vet**: `make vet`
 - **All checks**: `make check`
 
@@ -91,6 +92,7 @@ causality/
 │   ├── server/           # HTTP server for event ingestion
 │   └── warehouse-sink/   # NATS consumer → Parquet → S3
 ├── internal/
+│   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
 │   └── warehouse/        # Parquet writer and S3 upload

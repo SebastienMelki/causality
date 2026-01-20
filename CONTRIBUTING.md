@@ -25,7 +25,7 @@ Thank you for your interest in contributing to Causality! We're excited to have 
 
 2. **Install Dependencies**
    ```bash
-   # Install Go 1.25 or higher
+   # Install Go 1.24 or higher
    # https://golang.org/doc/install
    
    # Install Go dependencies
@@ -66,12 +66,15 @@ Thank you for your interest in contributing to Causality! We're excited to have 
    ```bash
    # Run all tests
    make test
-   
+
    # Run tests with coverage
    make coverage
-   
+
    # Run linting
    make lint
+
+   # Run linter with auto-fix
+   make lint-fix
    
    # Test mobile SDK generation
    make mobile
@@ -99,7 +102,8 @@ Thank you for your interest in contributing to Causality! We're excited to have 
 ### Go Code
 
 - Follow standard Go conventions and idioms
-- Use `gofmt` and `goimports` for formatting
+- Use `gofmt` and `goimports` for formatting (run `make lint-fix` to auto-format)
+- Use golangci-lint for comprehensive linting (run `make lint`)
 - Write clear, self-documenting code
 - Add comments for complex logic
 - Keep functions small and focused

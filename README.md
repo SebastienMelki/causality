@@ -53,7 +53,7 @@ Causality collects events from mobile and web applications, stores them in a dat
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.25.0+ (for development)
+- Go 1.24+ (for development)
 - Make
 
 ### Start the Environment
@@ -162,6 +162,7 @@ causality/
 │   ├── server/           # HTTP server
 │   └── warehouse-sink/   # NATS consumer → Parquet → S3
 ├── internal/
+│   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
 │   └── warehouse/        # Parquet writer and S3 upload
