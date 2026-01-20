@@ -16,25 +16,31 @@ import (
 
 // Config holds all server configuration.
 type Config struct {
-	// LogLevel is the log level (debug, info, warn, error)
+	// LogLevel is the log level (debug, info, warn, error).
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 
-	// LogFormat is the log format (json, text)
+	// LogFormat is the log format (json, text).
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
 
-	// HTTP gateway configuration
+	// HTTP gateway configuration.
 	Gateway gateway.Config `envPrefix:""`
 
-	// NATS configuration
+	// NATS configuration.
 	NATS nats.Config `envPrefix:""`
 }
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("fatal error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Load configuration from environment
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
-		slog.Error("failed to parse config", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Setup logger
@@ -58,16 +64,14 @@ func main() {
 	// Connect to NATS
 	natsClient, err := nats.NewClient(ctx, cfg.NATS, logger)
 	if err != nil {
-		logger.Error("failed to connect to NATS", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer natsClient.Close()
 
 	// Setup stream and consumers
 	streamMgr := nats.NewStreamManager(natsClient.JetStream(), cfg.NATS.Stream, logger)
 	if _, err := streamMgr.EnsureStream(ctx); err != nil {
-		logger.Error("failed to ensure stream", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Create publisher
@@ -76,8 +80,7 @@ func main() {
 	// Create and start HTTP server
 	server, err := gateway.NewServer(cfg.Gateway, natsClient, publisher, logger)
 	if err != nil {
-		logger.Error("failed to create server", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Start server in goroutine
@@ -109,6 +112,7 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+	return nil
 }
 
 // setupLogger creates a logger based on configuration.

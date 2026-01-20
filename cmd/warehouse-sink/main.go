@@ -16,28 +16,34 @@ import (
 
 // Config holds all warehouse sink configuration.
 type Config struct {
-	// LogLevel is the log level (debug, info, warn, error)
+	// LogLevel is the log level (debug, info, warn, error).
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 
-	// LogFormat is the log format (json, text)
+	// LogFormat is the log format (json, text).
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
 
-	// NATS configuration
+	// NATS configuration.
 	NATS nats.Config `envPrefix:""`
 
-	// Warehouse configuration
+	// Warehouse configuration.
 	Warehouse warehouse.Config `envPrefix:""`
 
-	// ConsumerName is the NATS consumer name
+	// ConsumerName is the NATS consumer name.
 	ConsumerName string `env:"CONSUMER_NAME" envDefault:"warehouse-sink"`
 }
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("fatal error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Load configuration from environment
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
-		slog.Error("failed to parse config", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Setup logger
@@ -63,8 +69,7 @@ func main() {
 	// Connect to NATS
 	natsClient, err := nats.NewClient(ctx, cfg.NATS, logger)
 	if err != nil {
-		logger.Error("failed to connect to NATS", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer natsClient.Close()
 
@@ -72,28 +77,24 @@ func main() {
 	streamMgr := nats.NewStreamManager(natsClient.JetStream(), cfg.NATS.Stream, logger)
 	stream, err := streamMgr.EnsureStream(ctx)
 	if err != nil {
-		logger.Error("failed to ensure stream", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Create consumers
 	consumerConfigs := nats.DefaultConsumerConfigs()
 	if err := streamMgr.EnsureConsumers(ctx, stream, consumerConfigs); err != nil {
-		logger.Error("failed to ensure consumers", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Create S3 client
 	s3Client, err := warehouse.NewS3Client(ctx, cfg.Warehouse.S3, logger)
 	if err != nil {
-		logger.Error("failed to create S3 client", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Ensure bucket exists
 	if err := s3Client.EnsureBucket(ctx); err != nil {
-		logger.Error("failed to ensure bucket", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Create and start consumer
@@ -107,8 +108,7 @@ func main() {
 	)
 
 	if err := consumer.Start(ctx); err != nil {
-		logger.Error("failed to start consumer", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	logger.Info("warehouse sink started")
@@ -130,6 +130,7 @@ func main() {
 	}
 
 	logger.Info("warehouse sink stopped")
+	return nil
 }
 
 // setupLogger creates a logger based on configuration.
