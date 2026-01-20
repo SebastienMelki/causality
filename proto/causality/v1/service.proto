@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package causality.v1;
+
+option go_package = "github.com/SebastienMelki/causality/pkg/proto/causality/v1;causalityv1";
+
+import "buf/validate/validate.proto";
+import "sebuf/http/annotations.proto";
+import "causality/v1/events.proto";
+
+// EventService handles event ingestion via HTTP.
+// sebuf generates HTTP handlers from this service definition.
+service EventService {
+  option (sebuf.http.service_config) = {base_path: "/v1/events"};
+
+  // IngestEvent handles single event ingestion.
+  // POST /v1/events/ingest
+  rpc IngestEvent(IngestEventRequest) returns (IngestEventResponse) {
+    option (sebuf.http.config) = {path: "/ingest"};
+  }
+
+  // IngestEventBatch handles batch event ingestion for efficiency.
+  // POST /v1/events/batch
+  rpc IngestEventBatch(IngestEventBatchRequest) returns (IngestEventBatchResponse) {
+    option (sebuf.http.config) = {path: "/batch"};
+  }
+}
+
+// IngestEventRequest is the request for single event ingestion.
+message IngestEventRequest {
+  // The event to ingest
+  EventEnvelope event = 1 [(buf.validate.field).required = true];
+}
+
+// IngestEventResponse is the response for single event ingestion.
+message IngestEventResponse {
+  // The assigned event ID (UUID v7)
+  string event_id = 1;
+
+  // Status of the ingestion
+  string status = 2;
+}
+
+// IngestEventBatchRequest is the request for batch event ingestion.
+message IngestEventBatchRequest {
+  // Events to ingest (max 1000 per batch)
+  repeated EventEnvelope events = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000
+  ];
+}
+
+// IngestEventBatchResponse is the response for batch event ingestion.
+message IngestEventBatchResponse {
+  // Number of events accepted
+  int32 accepted_count = 1;
+
+  // Number of events rejected due to validation errors
+  int32 rejected_count = 2;
+
+  // Individual event results
+  repeated EventResult results = 3;
+}
+
+// EventResult contains the result of a single event in a batch.
+message EventResult {
+  // Index of the event in the request batch
+  int32 index = 1;
+
+  // The assigned event ID (UUID v7) if accepted
+  string event_id = 2;
+
+  // Status: "accepted" or "rejected"
+  string status = 3;
+
+  // Error message if rejected
+  string error = 4;
+}

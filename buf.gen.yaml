@@ -1,0 +1,28 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/SebastienMelki/causality/pkg/proto
+  disable:
+    - file_option: go_package_prefix
+      module: buf.build/bufbuild/protovalidate
+    - file_option: go_package_prefix
+      module: buf.build/sebmelki/sebuf
+plugins:
+  # Standard Go protobuf generation
+  - remote: buf.build/protocolbuffers/go
+    out: pkg/proto
+    opt: paths=source_relative
+
+  # sebuf HTTP handler generation
+  - local: protoc-gen-go-http
+    out: pkg/proto
+    opt: paths=source_relative
+
+  # sebuf OpenAPI generation
+  - local: protoc-gen-openapiv3
+    out: api/openapi
+    opt:
+      - paths=source_relative
+      - output_mode=source_relative

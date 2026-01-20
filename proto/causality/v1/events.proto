@@ -1,0 +1,409 @@
+syntax = "proto3";
+
+package causality.v1;
+
+option go_package = "github.com/SebastienMelki/causality/pkg/proto/causality/v1;causalityv1";
+
+import "buf/validate/validate.proto";
+
+// EventEnvelope is the main wrapper for all events sent to the system.
+// It contains common metadata and a type-safe payload via oneof.
+message EventEnvelope {
+  // Unique event identifier (UUID v7 - time-sortable)
+  // If not provided, server will generate one
+  string id = 1;
+
+  // Application identifier for multi-tenant isolation
+  string app_id = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Device/session identifier
+  string device_id = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Event timestamp in milliseconds since Unix epoch
+  // If not provided, server will use current time
+  int64 timestamp_ms = 4;
+
+  // Optional correlation ID for request tracing
+  string correlation_id = 5;
+
+  // Device context with platform information
+  DeviceContext device_context = 6;
+
+  // Type-safe event payload using oneof
+  oneof payload {
+    // User events (1-99)
+    UserLogin user_login = 10;
+    UserLogout user_logout = 11;
+    UserSignup user_signup = 12;
+    UserProfileUpdate user_profile_update = 13;
+
+    // Screen events (100-199)
+    ScreenView screen_view = 100;
+    ScreenExit screen_exit = 101;
+
+    // Interaction events (200-299)
+    ButtonTap button_tap = 200;
+    SwipeGesture swipe_gesture = 201;
+    ScrollEvent scroll_event = 202;
+    TextInput text_input = 203;
+    LongPress long_press = 204;
+    DoubleTap double_tap = 205;
+
+    // Commerce events (300-399)
+    ProductView product_view = 300;
+    AddToCart add_to_cart = 301;
+    RemoveFromCart remove_from_cart = 302;
+    CheckoutStart checkout_start = 303;
+    CheckoutStep checkout_step = 304;
+    PurchaseComplete purchase_complete = 305;
+    PurchaseFailed purchase_failed = 306;
+
+    // System events (400-499)
+    AppStart app_start = 400;
+    AppBackground app_background = 401;
+    AppForeground app_foreground = 402;
+    AppCrash app_crash = 403;
+    NetworkChange network_change = 404;
+    PermissionRequest permission_request = 405;
+    PermissionResult permission_result = 406;
+    MemoryWarning memory_warning = 407;
+    BatteryChange battery_change = 408;
+
+    // Custom events (900-999)
+    CustomEvent custom_event = 900;
+  }
+}
+
+// DeviceContext contains information about the device and app.
+message DeviceContext {
+  // Platform identifier (ios, android, web)
+  Platform platform = 1;
+
+  // Operating system version (e.g., "17.0", "14", "Chrome 120")
+  string os_version = 2;
+
+  // App version string (e.g., "1.2.3")
+  string app_version = 3;
+
+  // App build number
+  string build_number = 4;
+
+  // Device model (e.g., "iPhone 15 Pro", "Pixel 8")
+  string device_model = 5;
+
+  // Device manufacturer
+  string manufacturer = 6;
+
+  // Screen width in pixels
+  int32 screen_width = 7;
+
+  // Screen height in pixels
+  int32 screen_height = 8;
+
+  // Device locale (e.g., "en_US")
+  string locale = 9;
+
+  // Timezone identifier (e.g., "America/New_York")
+  string timezone = 10;
+
+  // Network type (wifi, cellular, etc.)
+  NetworkType network_type = 11;
+
+  // Carrier name (for mobile)
+  string carrier = 12;
+
+  // Whether device is jailbroken/rooted (security signal)
+  bool is_jailbroken = 13;
+
+  // Whether device is an emulator (security signal)
+  bool is_emulator = 14;
+
+  // SDK version used
+  string sdk_version = 15;
+}
+
+// Platform enumeration
+enum Platform {
+  PLATFORM_UNSPECIFIED = 0;
+  PLATFORM_IOS = 1;
+  PLATFORM_ANDROID = 2;
+  PLATFORM_WEB = 3;
+}
+
+// NetworkType enumeration
+enum NetworkType {
+  NETWORK_TYPE_UNSPECIFIED = 0;
+  NETWORK_TYPE_WIFI = 1;
+  NETWORK_TYPE_CELLULAR_2G = 2;
+  NETWORK_TYPE_CELLULAR_3G = 3;
+  NETWORK_TYPE_CELLULAR_4G = 4;
+  NETWORK_TYPE_CELLULAR_5G = 5;
+  NETWORK_TYPE_ETHERNET = 6;
+  NETWORK_TYPE_OFFLINE = 7;
+}
+
+// ============================================================================
+// User Events (1-99)
+// ============================================================================
+
+message UserLogin {
+  string user_id = 1;
+  string method = 2; // email, google, apple, facebook, etc.
+  bool is_new_user = 3;
+}
+
+message UserLogout {
+  string user_id = 1;
+  string reason = 2; // manual, session_expired, forced, etc.
+}
+
+message UserSignup {
+  string user_id = 1;
+  string method = 2; // email, google, apple, facebook, etc.
+  string referral_source = 3;
+}
+
+message UserProfileUpdate {
+  string user_id = 1;
+  repeated string fields_updated = 2;
+}
+
+// ============================================================================
+// Screen Events (100-199)
+// ============================================================================
+
+message ScreenView {
+  string screen_name = 1 [(buf.validate.field).string.min_len = 1];
+  string screen_class = 2;
+  string previous_screen = 3;
+  map<string, string> params = 4;
+}
+
+message ScreenExit {
+  string screen_name = 1 [(buf.validate.field).string.min_len = 1];
+  int64 duration_ms = 2;
+  string next_screen = 3;
+}
+
+// ============================================================================
+// Interaction Events (200-299)
+// ============================================================================
+
+message ButtonTap {
+  string button_id = 1 [(buf.validate.field).string.min_len = 1];
+  string button_text = 2;
+  string screen_name = 3;
+  Coordinates coordinates = 4;
+}
+
+message SwipeGesture {
+  SwipeDirection direction = 1;
+  string screen_name = 2;
+  Coordinates start = 3;
+  Coordinates end = 4;
+  int64 duration_ms = 5;
+}
+
+enum SwipeDirection {
+  SWIPE_DIRECTION_UNSPECIFIED = 0;
+  SWIPE_DIRECTION_LEFT = 1;
+  SWIPE_DIRECTION_RIGHT = 2;
+  SWIPE_DIRECTION_UP = 3;
+  SWIPE_DIRECTION_DOWN = 4;
+}
+
+message ScrollEvent {
+  string screen_name = 1;
+  string container_id = 2;
+  int32 scroll_depth_percent = 3; // 0-100
+  ScrollDirection direction = 4;
+}
+
+enum ScrollDirection {
+  SCROLL_DIRECTION_UNSPECIFIED = 0;
+  SCROLL_DIRECTION_UP = 1;
+  SCROLL_DIRECTION_DOWN = 2;
+}
+
+message TextInput {
+  string field_id = 1 [(buf.validate.field).string.min_len = 1];
+  string field_type = 2; // text, email, password, search, etc.
+  string screen_name = 3;
+  int32 text_length = 4; // Length only, not content for privacy
+  int64 input_duration_ms = 5;
+}
+
+message LongPress {
+  string element_id = 1;
+  string screen_name = 2;
+  Coordinates coordinates = 3;
+  int64 duration_ms = 4;
+}
+
+message DoubleTap {
+  string element_id = 1;
+  string screen_name = 2;
+  Coordinates coordinates = 3;
+}
+
+message Coordinates {
+  float x = 1;
+  float y = 2;
+}
+
+// ============================================================================
+// Commerce Events (300-399)
+// ============================================================================
+
+message ProductView {
+  string product_id = 1 [(buf.validate.field).string.min_len = 1];
+  string product_name = 2;
+  string category = 3;
+  int64 price_cents = 4;
+  string currency = 5;
+  string source = 6; // search, recommendation, category, etc.
+}
+
+message AddToCart {
+  string product_id = 1 [(buf.validate.field).string.min_len = 1];
+  string product_name = 2;
+  int32 quantity = 3;
+  int64 price_cents = 4;
+  string currency = 5;
+  string cart_id = 6;
+}
+
+message RemoveFromCart {
+  string product_id = 1 [(buf.validate.field).string.min_len = 1];
+  int32 quantity = 2;
+  string cart_id = 3;
+  string reason = 4;
+}
+
+message CheckoutStart {
+  string cart_id = 1;
+  int32 item_count = 2;
+  int64 total_cents = 3;
+  string currency = 4;
+}
+
+message CheckoutStep {
+  string cart_id = 1;
+  int32 step_number = 2;
+  string step_name = 3; // shipping, payment, review, etc.
+  int64 step_duration_ms = 4;
+}
+
+message PurchaseComplete {
+  string order_id = 1 [(buf.validate.field).string.min_len = 1];
+  string cart_id = 2;
+  int32 item_count = 3;
+  int64 total_cents = 4;
+  string currency = 5;
+  string payment_method = 6;
+  repeated PurchaseItem items = 7;
+}
+
+message PurchaseFailed {
+  string cart_id = 1;
+  string error_code = 2;
+  string error_message = 3;
+  string payment_method = 4;
+  int32 checkout_step = 5;
+}
+
+message PurchaseItem {
+  string product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  int64 price_cents = 4;
+}
+
+// ============================================================================
+// System Events (400-499)
+// ============================================================================
+
+message AppStart {
+  bool is_cold_start = 1;
+  int64 launch_duration_ms = 2;
+  string launch_source = 3; // direct, deeplink, push, etc.
+  string deeplink_url = 4;
+}
+
+message AppBackground {
+  int64 foreground_duration_ms = 1;
+  string current_screen = 2;
+}
+
+message AppForeground {
+  int64 background_duration_ms = 1;
+  string resume_screen = 2;
+}
+
+message AppCrash {
+  string crash_type = 1; // exception, anr, oom, etc.
+  string crash_message = 2;
+  string stack_trace = 3;
+  string current_screen = 4;
+}
+
+message NetworkChange {
+  NetworkType previous_type = 1;
+  NetworkType current_type = 2;
+}
+
+message PermissionRequest {
+  string permission_type = 1; // camera, location, notifications, etc.
+  string trigger_screen = 2;
+}
+
+message PermissionResult {
+  string permission_type = 1;
+  PermissionStatus status = 2;
+}
+
+enum PermissionStatus {
+  PERMISSION_STATUS_UNSPECIFIED = 0;
+  PERMISSION_STATUS_GRANTED = 1;
+  PERMISSION_STATUS_DENIED = 2;
+  PERMISSION_STATUS_DENIED_PERMANENTLY = 3;
+}
+
+message MemoryWarning {
+  int64 available_memory_bytes = 1;
+  int64 used_memory_bytes = 2;
+  MemoryWarningLevel level = 3;
+}
+
+enum MemoryWarningLevel {
+  MEMORY_WARNING_LEVEL_UNSPECIFIED = 0;
+  MEMORY_WARNING_LEVEL_LOW = 1;
+  MEMORY_WARNING_LEVEL_CRITICAL = 2;
+}
+
+message BatteryChange {
+  int32 battery_level = 1; // 0-100
+  BatteryState state = 2;
+}
+
+enum BatteryState {
+  BATTERY_STATE_UNSPECIFIED = 0;
+  BATTERY_STATE_CHARGING = 1;
+  BATTERY_STATE_DISCHARGING = 2;
+  BATTERY_STATE_FULL = 3;
+}
+
+// ============================================================================
+// Custom Events (900-999)
+// ============================================================================
+
+message CustomEvent {
+  // Custom event name
+  string event_name = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Typed parameters
+  map<string, string> string_params = 2;
+  map<string, int64> int_params = 3;
+  map<string, double> float_params = 4;
+  map<string, bool> bool_params = 5;
+}
