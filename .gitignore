@@ -41,11 +41,15 @@ android/
 wasm/
 web/dist/
 
-# Protocol Buffer generated files
-*.pb.go
-*_grpc.pb.go
-# Uncomment if you want to track generated protobuf files
-# !proto/*.pb.go
+# Protocol Buffer generated files (track pkg/proto for reproducible builds)
+# Generated code in pkg/proto/ is committed to version control
+# !*.pb.go  # Uncomment to ignore all pb.go files
+
+# Coverage directory
+coverage/
+
+# Generated OpenAPI specs
+api/openapi/
 
 # IDE specific files
 .vscode/
