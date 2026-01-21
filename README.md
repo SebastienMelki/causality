@@ -48,6 +48,7 @@ Causality collects events from mobile and web applications, stores them in a dat
 ### Components
 
 - **HTTP Server**: RESTful API for event ingestion (`/v1/events/ingest`, `/v1/events/batch`)
+- **Admin UI**: Web-based configuration management (`/admin`)
 - **NATS JetStream**: Event streaming and reliable delivery
 - **Warehouse Sink**: Consumes events, writes Parquet files to S3
 - **Reaction Engine**: Rule evaluation, anomaly detection, webhook delivery
@@ -76,6 +77,7 @@ make docker-up
 
 This starts:
 - HTTP Server: http://localhost:8080
+- Admin UI: http://localhost:8080/admin
 - NATS Monitoring: http://localhost:8222
 - MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
 - Trino: http://localhost:8085
@@ -121,6 +123,16 @@ FROM hive.causality.events
 GROUP BY event_type
 ORDER BY event_count DESC
 ```
+
+### Admin UI
+
+Access the Admin UI at http://localhost:8080/admin to manage:
+
+- **Rules**: Create event matching rules with JSONPath conditions
+- **Webhooks**: Configure webhook endpoints with authentication
+- **Anomaly Detection**: Set up threshold, rate, or count-based anomaly detection
+- **Event Browser**: Query and browse events from Trino
+- **Custom Event Types**: Define custom event schemas
 
 ## API
 
@@ -171,6 +183,7 @@ causality/
 │   ├── warehouse-sink/   # NATS consumer → Parquet → S3
 │   └── reaction-engine/  # Rule evaluation and anomaly detection
 ├── internal/
+│   ├── admin/            # Admin UI (templ + HTMX)
 │   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
@@ -230,6 +243,9 @@ make nats-info      # Show NATS server info
 **HTTP Server:**
 - `HTTP_ADDR`: Listen address (default: `:8080`)
 - `NATS_URL`: NATS server URL (default: `nats://localhost:4222`)
+- `ADMIN_ENABLED`: Enable admin UI (default: `true`)
+- `DATABASE_HOST` / `DATABASE_PORT`: PostgreSQL for admin UI
+- `TRINO_HOST` / `TRINO_PORT`: Trino connection for event browser
 
 **Warehouse Sink:**
 - `NATS_URL`: NATS server URL
