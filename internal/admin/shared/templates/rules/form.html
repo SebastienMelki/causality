@@ -1,0 +1,114 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">{{if .Data.IsEdit}}Edit Rule{{else}}New Rule{{end}}</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form {{if .Data.IsEdit}}hx-put="/admin/rules/{{.Data.Rule.ID}}"{{else}}hx-post="/admin/rules"{{end}}
+              hx-target="body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="name">Name *</label>
+                    <input type="text" class="form-control {{if index .Data.Errors "name"}}is-invalid{{end}}"
+                           id="name" name="name" value="{{.Data.Rule.Name}}" required>
+                    {{if index .Data.Errors "name"}}
+                    <div class="form-error">{{index .Data.Errors "name"}}</div>
+                    {{end}}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="priority">Priority</label>
+                    <input type="number" class="form-control" id="priority" name="priority" value="{{.Data.Rule.Priority}}">
+                    <div class="form-text">Higher priority rules are evaluated first</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="description">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="2">{{.Data.Rule.Description}}</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="app_id">App ID</label>
+                    <input type="text" class="form-control" id="app_id" name="app_id"
+                           value="{{if .Data.Rule.AppID.Valid}}{{.Data.Rule.AppID.String}}{{end}}"
+                           placeholder="Leave empty for all apps">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="event_category">Event Category</label>
+                    <select class="form-control" id="event_category" name="event_category">
+                        <option value="">All Categories</option>
+                        <option value="navigation" {{if eq .Data.Rule.EventCategory.String "navigation"}}selected{{end}}>Navigation</option>
+                        <option value="interaction" {{if eq .Data.Rule.EventCategory.String "interaction"}}selected{{end}}>Interaction</option>
+                        <option value="authentication" {{if eq .Data.Rule.EventCategory.String "authentication"}}selected{{end}}>Authentication</option>
+                        <option value="commerce" {{if eq .Data.Rule.EventCategory.String "commerce"}}selected{{end}}>Commerce</option>
+                        <option value="lifecycle" {{if eq .Data.Rule.EventCategory.String "lifecycle"}}selected{{end}}>Lifecycle</option>
+                        <option value="system" {{if eq .Data.Rule.EventCategory.String "system"}}selected{{end}}>System</option>
+                        <option value="custom" {{if eq .Data.Rule.EventCategory.String "custom"}}selected{{end}}>Custom</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="event_type">Event Type</label>
+                <input type="text" class="form-control" id="event_type" name="event_type"
+                       value="{{if .Data.Rule.EventType.Valid}}{{.Data.Rule.EventType.String}}{{end}}"
+                       placeholder="Leave empty for all types (e.g., screenView, buttonTap)">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="conditions">Conditions (JSON)</label>
+                <textarea class="form-control {{if index .Data.Errors "conditions"}}is-invalid{{end}}"
+                          id="conditions" name="conditions" rows="4" style="font-family: var(--font-mono);">{{printf "%s" .Data.Rule.Conditions}}</textarea>
+                <div class="form-text">
+                    Array of conditions: [{"path": "$.field", "operator": "eq", "value": "test"}]
+                    <br>Operators: eq, ne, gt, gte, lt, lte, contains, startsWith, endsWith, exists
+                </div>
+                {{if index .Data.Errors "conditions"}}
+                <div class="form-error">{{index .Data.Errors "conditions"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="actions">Actions (JSON)</label>
+                <textarea class="form-control {{if index .Data.Errors "actions"}}is-invalid{{end}}"
+                          id="actions" name="actions" rows="4" style="font-family: var(--font-mono);">{{printf "%s" .Data.Rule.Actions}}</textarea>
+                <div class="form-text">
+                    {"webhooks": ["webhook-uuid"], "publish_subjects": ["alerts.{app_id}.type"]}
+                </div>
+                {{if index .Data.Errors "actions"}}
+                <div class="form-error">{{index .Data.Errors "actions"}}</div>
+                {{end}}
+            </div>
+
+            {{if .Data.Webhooks}}
+            <div class="form-group">
+                <label class="form-label">Available Webhooks</label>
+                <div class="code-block">
+                    {{range .Data.Webhooks}}
+                    <div>{{.ID}} - {{.Name}}</div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" class="form-check-input" name="enabled" {{if .Data.Rule.Enabled}}checked{{end}}>
+                    <span>Enabled</span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-primary">
+                    {{if .Data.IsEdit}}Update Rule{{else}}Create Rule{{end}}
+                </button>
+                <a href="/admin/rules" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

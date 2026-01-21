@@ -1,0 +1,33 @@
+{{define "rules/row.html"}}
+<tr id="rule-{{.ID}}">
+    <td>
+        <strong>{{.Name}}</strong>
+        {{if .Description}}
+        <div class="form-text">{{truncate .Description 50}}</div>
+        {{end}}
+    </td>
+    <td>{{if .AppID.Valid}}{{.AppID.String}}{{else}}<span class="badge badge-secondary">All</span>{{end}}</td>
+    <td>
+        {{if .EventCategory.Valid}}{{.EventCategory.String}}{{else}}<span class="badge badge-secondary">Any</span>{{end}}
+        {{if .EventType.Valid}}/ {{.EventType.String}}{{end}}
+    </td>
+    <td>{{.Priority}}</td>
+    <td>
+        <label class="toggle">
+            <input type="checkbox" {{if .Enabled}}checked{{end}}
+                   hx-post="/admin/rules/{{.ID}}/toggle"
+                   hx-target="#rule-{{.ID}}"
+                   hx-swap="outerHTML">
+            <span class="toggle-slider"></span>
+        </label>
+    </td>
+    <td class="table-actions">
+        <a href="/admin/rules/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="/admin/rules/{{.ID}}"
+                hx-confirm="Are you sure you want to delete this rule?">
+            Delete
+        </button>
+    </td>
+</tr>
+{{end}}

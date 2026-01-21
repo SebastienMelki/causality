@@ -1,0 +1,319 @@
+package templates
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strconv"
+)
+
+type Rule struct {
+	ID            string
+	Name          string
+	Description   string
+	AppID         sql.NullString
+	EventCategory sql.NullString
+	EventType     sql.NullString
+	Conditions    json.RawMessage
+	Actions       json.RawMessage
+	Priority      int
+	Enabled       bool
+}
+
+type Webhook struct {
+	ID         string
+	Name       string
+	URL        string
+	AuthType   string
+	AuthConfig json.RawMessage
+	Headers    json.RawMessage
+	TimeoutMs  int
+	Enabled    bool
+}
+
+templ RulesListPage(rules []Rule) {
+	@Layout(PageData{Title: "Rules", CurrentPath: "/admin/rules"}) {
+		<div class="page-header">
+			<h1 class="page-title">Rules</h1>
+			<a href="/admin/rules/new" class="btn btn-primary">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+				</svg>
+				New Rule
+			</a>
+		</div>
+		<div class="card">
+			<div class="card-body" style="padding: 0;">
+				if len(rules) > 0 {
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>App ID</th>
+								<th>Event Type</th>
+								<th>Priority</th>
+								<th>Status</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody id="rules-list">
+							for _, rule := range rules {
+								@RuleRow(rule)
+							}
+						</tbody>
+					</table>
+				} else {
+					@EmptyState("rules", "No rules yet", "Create your first rule to start matching events.", "/admin/rules/new", "Create Rule")
+				}
+			</div>
+		</div>
+	}
+}
+
+templ RuleRow(rule Rule) {
+	<tr id={ fmt.Sprintf("rule-%s", rule.ID) }>
+		<td>
+			<strong>{ rule.Name }</strong>
+			if rule.Description != "" {
+				<div class="form-text">{ truncateStr(rule.Description, 50) }</div>
+			}
+		</td>
+		<td>
+			if rule.AppID.Valid {
+				{ rule.AppID.String }
+			} else {
+				<span class="badge badge-secondary">All</span>
+			}
+		</td>
+		<td>
+			if rule.EventCategory.Valid {
+				{ rule.EventCategory.String }
+			} else {
+				<span class="badge badge-secondary">Any</span>
+			}
+			if rule.EventType.Valid {
+				/ { rule.EventType.String }
+			}
+		</td>
+		<td>{ strconv.Itoa(rule.Priority) }</td>
+		<td>
+			<label class="toggle">
+				<input
+					type="checkbox"
+					if rule.Enabled {
+						checked
+					}
+					hx-post={ fmt.Sprintf("/admin/rules/%s/toggle", rule.ID) }
+					hx-target={ fmt.Sprintf("#rule-%s", rule.ID) }
+					hx-swap="outerHTML"
+				/>
+				<span class="toggle-slider"></span>
+			</label>
+		</td>
+		<td class="table-actions">
+			<a href={ templ.SafeURL(fmt.Sprintf("/admin/rules/%s/edit", rule.ID)) } class="btn btn-sm btn-secondary">Edit</a>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-delete={ fmt.Sprintf("/admin/rules/%s", rule.ID) }
+				hx-confirm="Are you sure you want to delete this rule?"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+type RuleFormData struct {
+	Rule     Rule
+	Webhooks []Webhook
+	IsEdit   bool
+	Errors   map[string]string
+}
+
+templ RuleFormPage(data RuleFormData) {
+	@Layout(PageData{Title: ruleFormTitle(data.IsEdit), CurrentPath: "/admin/rules"}) {
+		<div class="page-header">
+			<h1 class="page-title">
+				if data.IsEdit {
+					Edit Rule
+				} else {
+					New Rule
+				}
+			</h1>
+		</div>
+		<div class="card">
+			<div class="card-body">
+				<form
+					if data.IsEdit {
+						hx-put={ fmt.Sprintf("/admin/rules/%s", data.Rule.ID) }
+					} else {
+						hx-post="/admin/rules"
+					}
+					hx-target="body"
+				>
+					<div class="form-row">
+						<div class="form-group">
+							<label class="form-label" for="name">Name *</label>
+							<input
+								type="text"
+								class={ "form-control", templ.KV("is-invalid", data.Errors["name"] != "") }
+								id="name"
+								name="name"
+								value={ data.Rule.Name }
+								required
+							/>
+							if data.Errors["name"] != "" {
+								<div class="form-error">{ data.Errors["name"] }</div>
+							}
+						</div>
+						<div class="form-group">
+							<label class="form-label" for="priority">Priority</label>
+							<input type="number" class="form-control" id="priority" name="priority" value={ strconv.Itoa(data.Rule.Priority) }/>
+							<div class="form-text">Higher priority rules are evaluated first</div>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="description">Description</label>
+						<textarea class="form-control" id="description" name="description" rows="2">{ data.Rule.Description }</textarea>
+					</div>
+					<div class="form-row">
+						<div class="form-group">
+							<label class="form-label" for="app_id">App ID</label>
+							<input
+								type="text"
+								class="form-control"
+								id="app_id"
+								name="app_id"
+								value={ nullStringValue(data.Rule.AppID) }
+								placeholder="Leave empty for all apps"
+							/>
+						</div>
+						<div class="form-group">
+							<label class="form-label" for="event_category">Event Category</label>
+							<select class="form-control" id="event_category" name="event_category">
+								<option value="">All Categories</option>
+								@categoryOption("navigation", data.Rule.EventCategory)
+								@categoryOption("interaction", data.Rule.EventCategory)
+								@categoryOption("authentication", data.Rule.EventCategory)
+								@categoryOption("commerce", data.Rule.EventCategory)
+								@categoryOption("lifecycle", data.Rule.EventCategory)
+								@categoryOption("system", data.Rule.EventCategory)
+								@categoryOption("custom", data.Rule.EventCategory)
+							</select>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="event_type">Event Type</label>
+						<input
+							type="text"
+							class="form-control"
+							id="event_type"
+							name="event_type"
+							value={ nullStringValue(data.Rule.EventType) }
+							placeholder="Leave empty for all types (e.g., screenView, buttonTap)"
+						/>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="conditions">Conditions (JSON)</label>
+						<textarea
+							class={ "form-control", templ.KV("is-invalid", data.Errors["conditions"] != "") }
+							id="conditions"
+							name="conditions"
+							rows="4"
+							style="font-family: var(--font-mono);"
+						>{ string(data.Rule.Conditions) }</textarea>
+						<div class="form-text">
+							Array of conditions: [&#123;"path": "$.field", "operator": "eq", "value": "test"&#125;]
+							<br/>
+							Operators: eq, ne, gt, gte, lt, lte, contains, startsWith, endsWith, exists
+						</div>
+						if data.Errors["conditions"] != "" {
+							<div class="form-error">{ data.Errors["conditions"] }</div>
+						}
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="actions">Actions (JSON)</label>
+						<textarea
+							class={ "form-control", templ.KV("is-invalid", data.Errors["actions"] != "") }
+							id="actions"
+							name="actions"
+							rows="4"
+							style="font-family: var(--font-mono);"
+						>{ string(data.Rule.Actions) }</textarea>
+						<div class="form-text">
+							&#123;"webhooks": ["webhook-uuid"], "publish_subjects": ["alerts.&#123;app_id&#125;.type"]&#125;
+						</div>
+						if data.Errors["actions"] != "" {
+							<div class="form-error">{ data.Errors["actions"] }</div>
+						}
+					</div>
+					if len(data.Webhooks) > 0 {
+						<div class="form-group">
+							<label class="form-label">Available Webhooks</label>
+							<div class="code-block">
+								for _, wh := range data.Webhooks {
+									<div>{ wh.ID } - { wh.Name }</div>
+								}
+							</div>
+						</div>
+					}
+					<div class="form-group">
+						<label class="form-check">
+							<input
+								type="checkbox"
+								class="form-check-input"
+								name="enabled"
+								if data.Rule.Enabled {
+									checked
+								}
+							/>
+							<span>Enabled</span>
+						</label>
+					</div>
+					<div style="display: flex; gap: 1rem;">
+						<button type="submit" class="btn btn-primary">
+							if data.IsEdit {
+								Update Rule
+							} else {
+								Create Rule
+							}
+						</button>
+						<a href="/admin/rules" class="btn btn-secondary">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+func ruleFormTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit Rule"
+	}
+	return "New Rule"
+}
+
+func nullStringValue(ns sql.NullString) string {
+	if ns.Valid {
+		return ns.String
+	}
+	return ""
+}
+
+templ categoryOption(value string, selected sql.NullString) {
+	<option
+		value={ value }
+		if selected.Valid && selected.String == value {
+			selected
+		}
+	>
+		{ capitalize(value) }
+	</option>
+}
+
+func capitalize(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	return string(s[0]-32) + s[1:]
+}

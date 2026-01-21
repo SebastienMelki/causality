@@ -1,0 +1,79 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">{{if .Data.IsEdit}}Edit Custom Event Type{{else}}New Custom Event Type{{end}}</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form {{if .Data.IsEdit}}hx-put="/admin/custom-events/{{.Data.Type.ID}}"{{else}}hx-post="/admin/custom-events"{{end}}
+              hx-target="body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="name">Name *</label>
+                    <input type="text" class="form-control {{if index .Data.Errors "name"}}is-invalid{{end}}"
+                           id="name" name="name" value="{{.Data.Type.Name}}" required
+                           placeholder="e.g., purchaseComplete">
+                    {{if index .Data.Errors "name"}}
+                    <div class="form-error">{{index .Data.Errors "name"}}</div>
+                    {{end}}
+                    <div class="form-text">Use camelCase for event type names</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="category">Category *</label>
+                    <select class="form-control {{if index .Data.Errors "category"}}is-invalid{{end}}"
+                            id="category" name="category" required>
+                        <option value="custom" {{if eq .Data.Type.Category "custom"}}selected{{end}}>Custom</option>
+                        <option value="navigation" {{if eq .Data.Type.Category "navigation"}}selected{{end}}>Navigation</option>
+                        <option value="interaction" {{if eq .Data.Type.Category "interaction"}}selected{{end}}>Interaction</option>
+                        <option value="authentication" {{if eq .Data.Type.Category "authentication"}}selected{{end}}>Authentication</option>
+                        <option value="commerce" {{if eq .Data.Type.Category "commerce"}}selected{{end}}>Commerce</option>
+                        <option value="lifecycle" {{if eq .Data.Type.Category "lifecycle"}}selected{{end}}>Lifecycle</option>
+                        <option value="system" {{if eq .Data.Type.Category "system"}}selected{{end}}>System</option>
+                    </select>
+                    {{if index .Data.Errors "category"}}
+                    <div class="form-error">{{index .Data.Errors "category"}}</div>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="description">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="2"
+                          placeholder="Describe when this event type should be used">{{.Data.Type.Description}}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="schema">Parameter Schema (JSON Schema)</label>
+                <textarea class="form-control {{if index .Data.Errors "schema"}}is-invalid{{end}}"
+                          id="schema" name="schema" rows="12" style="font-family: var(--font-mono);">{{printf "%s" .Data.Type.Schema}}</textarea>
+                <div class="form-text">
+                    Define the expected parameters using JSON Schema format. Example:
+                    <div class="code-block" style="margin-top: 0.5rem;">
+{
+  "type": "object",
+  "required": ["productId", "amount"],
+  "properties": {
+    "productId": {"type": "string"},
+    "amount": {"type": "number"},
+    "currency": {"type": "string", "default": "USD"}
+  }
+}
+                    </div>
+                </div>
+                {{if index .Data.Errors "schema"}}
+                <div class="form-error">{{index .Data.Errors "schema"}}</div>
+                {{end}}
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-primary">
+                    {{if .Data.IsEdit}}Update Type{{else}}Create Type{{end}}
+                </button>
+                <a href="/admin/custom-events" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

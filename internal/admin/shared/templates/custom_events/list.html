@@ -1,0 +1,58 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">Custom Event Types</h1>
+    <a href="/admin/custom-events/new" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        New Type
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        {{if .Data.Types}}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Data.Types}}
+                <tr id="type-{{.ID}}">
+                    <td><strong>{{.Name}}</strong></td>
+                    <td>{{if .Description}}{{truncate .Description 50}}{{else}}<span class="badge badge-secondary">-</span>{{end}}</td>
+                    <td><span class="badge badge-info">{{.Category}}</span></td>
+                    <td>{{formatDate .CreatedAt}}</td>
+                    <td class="table-actions">
+                        <a href="/admin/custom-events/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                        <button class="btn btn-sm btn-danger"
+                                hx-delete="/admin/custom-events/{{.ID}}"
+                                hx-confirm="Are you sure you want to delete this custom event type?">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            <h3>No custom event types yet</h3>
+            <p>Define custom event types to standardize your event parameters.</p>
+            <a href="/admin/custom-events/new" class="btn btn-primary">Create Type</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

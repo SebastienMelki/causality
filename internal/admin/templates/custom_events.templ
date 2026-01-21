@@ -1,0 +1,183 @@
+package templates
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+type CustomEventType struct {
+	ID          string
+	Name        string
+	Description string
+	Category    string
+	Schema      json.RawMessage
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+templ CustomEventsListPage(types []CustomEventType) {
+	@Layout(PageData{Title: "Custom Event Types", CurrentPath: "/admin/custom-events"}) {
+		<div class="page-header">
+			<h1 class="page-title">Custom Event Types</h1>
+			<a href="/admin/custom-events/new" class="btn btn-primary">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+				</svg>
+				New Event Type
+			</a>
+		</div>
+		<div class="card">
+			<div class="card-body" style="padding: 0;">
+				if len(types) > 0 {
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Category</th>
+								<th>Description</th>
+								<th>Created</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, t := range types {
+								@CustomEventTypeRow(t)
+							}
+						</tbody>
+					</table>
+				} else {
+					@EmptyState("custom-events", "No custom event types yet", "Define custom event types for your application.", "/admin/custom-events/new", "Create Event Type")
+				}
+			</div>
+		</div>
+	}
+}
+
+templ CustomEventTypeRow(t CustomEventType) {
+	<tr id={ fmt.Sprintf("custom-event-%s", t.ID) }>
+		<td><strong>{ t.Name }</strong></td>
+		<td><span class="badge badge-info">{ t.Category }</span></td>
+		<td>{ truncateStr(t.Description, 50) }</td>
+		<td>{ t.CreatedAt.Format("2006-01-02") }</td>
+		<td class="table-actions">
+			<a href={ templ.SafeURL(fmt.Sprintf("/admin/custom-events/%s/edit", t.ID)) } class="btn btn-sm btn-secondary">Edit</a>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-delete={ fmt.Sprintf("/admin/custom-events/%s", t.ID) }
+				hx-confirm="Are you sure you want to delete this event type?"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+type CustomEventFormData struct {
+	EventType CustomEventType
+	IsEdit    bool
+	Errors    map[string]string
+}
+
+templ CustomEventFormPage(data CustomEventFormData) {
+	@Layout(PageData{Title: customEventFormTitle(data.IsEdit), CurrentPath: "/admin/custom-events"}) {
+		<div class="page-header">
+			<h1 class="page-title">
+				if data.IsEdit {
+					Edit Custom Event Type
+				} else {
+					New Custom Event Type
+				}
+			</h1>
+		</div>
+		<div class="card">
+			<div class="card-body">
+				<form
+					if data.IsEdit {
+						hx-put={ fmt.Sprintf("/admin/custom-events/%s", data.EventType.ID) }
+					} else {
+						hx-post="/admin/custom-events"
+					}
+					hx-target="body"
+				>
+					<div class="form-row">
+						<div class="form-group">
+							<label class="form-label" for="name">Name *</label>
+							<input
+								type="text"
+								class={ "form-control", templ.KV("is-invalid", data.Errors["name"] != "") }
+								id="name"
+								name="name"
+								value={ data.EventType.Name }
+								required
+								placeholder="e.g., userSubscribed, paymentFailed"
+							/>
+							if data.Errors["name"] != "" {
+								<div class="form-error">{ data.Errors["name"] }</div>
+							}
+						</div>
+						<div class="form-group">
+							<label class="form-label" for="category">Category *</label>
+							<select class="form-control" id="category" name="category" required>
+								@customEventCategoryOption("custom", data.EventType.Category)
+								@customEventCategoryOption("commerce", data.EventType.Category)
+								@customEventCategoryOption("authentication", data.EventType.Category)
+								@customEventCategoryOption("lifecycle", data.EventType.Category)
+								@customEventCategoryOption("system", data.EventType.Category)
+							</select>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="description">Description</label>
+						<textarea class="form-control" id="description" name="description" rows="2">{ data.EventType.Description }</textarea>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="schema">Parameter Schema (JSON Schema)</label>
+						<textarea
+							class={ "form-control", templ.KV("is-invalid", data.Errors["schema"] != "") }
+							id="schema"
+							name="schema"
+							rows="10"
+							style="font-family: var(--font-mono);"
+						>{ string(data.EventType.Schema) }</textarea>
+						<div class="form-text">
+							Define the expected parameters using JSON Schema format.<br/>
+							Example: &#123;"type": "object", "properties": &#123;"plan": &#123;"type": "string"&#125;, "price": &#123;"type": "number"&#125;&#125;&#125;
+						</div>
+						if data.Errors["schema"] != "" {
+							<div class="form-error">{ data.Errors["schema"] }</div>
+						}
+					</div>
+					<div style="display: flex; gap: 1rem;">
+						<button type="submit" class="btn btn-primary">
+							if data.IsEdit {
+								Update Event Type
+							} else {
+								Create Event Type
+							}
+						</button>
+						<a href="/admin/custom-events" class="btn btn-secondary">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+func customEventFormTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit Custom Event Type"
+	}
+	return "New Custom Event Type"
+}
+
+templ customEventCategoryOption(value, selected string) {
+	<option
+		value={ value }
+		if value == selected || (selected == "" && value == "custom") {
+			selected
+		}
+	>
+		{ capitalize(value) }
+	</option>
+}

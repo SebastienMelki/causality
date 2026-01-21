@@ -1,0 +1,207 @@
+package templates
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+)
+
+type Event struct {
+	ID            string
+	AppID         string
+	EventType     string
+	EventCategory string
+	DeviceID      string
+	Platform      string
+	Timestamp     time.Time
+	Parameters    string
+}
+
+type EventFilter struct {
+	AppID         string
+	EventCategory string
+	EventType     string
+	StartDate     string
+	EndDate       string
+	Limit         int
+	Offset        int
+}
+
+type EventsPageData struct {
+	Events      []Event
+	HasMore     bool
+	Filter      EventFilter
+	AppIDs      []string
+	Categories  []string
+	EventTypes  []string
+}
+
+templ EventsListPage(data EventsPageData) {
+	@Layout(PageData{Title: "Event Browser", CurrentPath: "/admin/events"}) {
+		<div class="page-header">
+			<h1 class="page-title">Event Browser</h1>
+		</div>
+		<div class="card" style="margin-bottom: 1.5rem;">
+			<div class="card-header">
+				<h2 class="card-title">Filters</h2>
+			</div>
+			<div class="card-body">
+				<form hx-get="/admin/api/events" hx-target="#events-table" hx-swap="innerHTML">
+					<div class="filters">
+						<div class="filter-group">
+							<label class="filter-label" for="app_id">App ID</label>
+							<select class="form-control" id="app_id" name="app_id" style="width: 200px;">
+								<option value="">All Apps</option>
+								for _, appID := range data.AppIDs {
+									<option value={ appID } selected?={ appID == data.Filter.AppID }>{ appID }</option>
+								}
+							</select>
+						</div>
+						<div class="filter-group">
+							<label class="filter-label" for="event_category">Category</label>
+							<select class="form-control" id="event_category" name="event_category" style="width: 150px;">
+								<option value="">All Categories</option>
+								for _, cat := range data.Categories {
+									<option value={ cat } selected?={ cat == data.Filter.EventCategory }>{ cat }</option>
+								}
+							</select>
+						</div>
+						<div class="filter-group">
+							<label class="filter-label" for="event_type">Event Type</label>
+							<select class="form-control" id="event_type" name="event_type" style="width: 180px;">
+								<option value="">All Types</option>
+								for _, et := range data.EventTypes {
+									<option value={ et } selected?={ et == data.Filter.EventType }>{ et }</option>
+								}
+							</select>
+						</div>
+						<div class="filter-group">
+							<label class="filter-label" for="start_date">Start Date</label>
+							<input
+								type="date"
+								class="form-control"
+								id="start_date"
+								name="start_date"
+								value={ data.Filter.StartDate }
+								style="width: 150px;"
+							/>
+						</div>
+						<div class="filter-group">
+							<label class="filter-label" for="end_date">End Date</label>
+							<input
+								type="date"
+								class="form-control"
+								id="end_date"
+								name="end_date"
+								value={ data.Filter.EndDate }
+								style="width: 150px;"
+							/>
+						</div>
+						<div class="filter-group" style="align-self: flex-end;">
+							<button type="submit" class="btn btn-primary">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+								</svg>
+								Search
+							</button>
+						</div>
+					</div>
+				</form>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-body" style="padding: 0;">
+				<div id="events-table">
+					@EventsTable(data)
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ EventsTable(data EventsPageData) {
+	if len(data.Events) > 0 {
+		<table class="table">
+			<thead>
+				<tr>
+					<th>Timestamp</th>
+					<th>App ID</th>
+					<th>Category</th>
+					<th>Event Type</th>
+					<th>Device ID</th>
+					<th>Platform</th>
+					<th>Parameters</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, event := range data.Events {
+					<tr>
+						<td style="white-space: nowrap;">{ event.Timestamp.Format("2006-01-02 15:04:05") }</td>
+						<td>{ event.AppID }</td>
+						<td><span class="badge badge-info">{ event.EventCategory }</span></td>
+						<td>{ event.EventType }</td>
+						<td>
+							if event.DeviceID != "" {
+								{ truncateStr(event.DeviceID, 20) }
+							} else {
+								<span class="badge badge-secondary">-</span>
+							}
+						</td>
+						<td>
+							if event.Platform != "" {
+								{ event.Platform }
+							} else {
+								<span class="badge badge-secondary">-</span>
+							}
+						</td>
+						<td>
+							<div class="code-block" style="max-width: 300px; overflow: auto; font-size: 0.7rem;">
+								{ truncateStr(event.Parameters, 100) }
+							</div>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<div class="pagination">
+			if data.Filter.Offset > 0 {
+				<a
+					href="#"
+					class="pagination-link"
+					hx-get={ buildEventsURL(data.Filter, data.Filter.Offset-data.Filter.Limit) }
+					hx-target="#events-table"
+					hx-swap="innerHTML"
+				>
+					&larr; Previous
+				</a>
+			}
+			<span style="padding: 0 1rem; color: var(--text-muted);">
+				Showing { strconv.Itoa(data.Filter.Offset + 1) } - { strconv.Itoa(data.Filter.Offset + len(data.Events)) }
+			</span>
+			if data.HasMore {
+				<a
+					href="#"
+					class="pagination-link"
+					hx-get={ buildEventsURL(data.Filter, data.Filter.Offset+data.Filter.Limit) }
+					hx-target="#events-table"
+					hx-swap="innerHTML"
+				>
+					Next &rarr;
+				</a>
+			}
+		</div>
+	} else {
+		<div class="empty-state">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+			</svg>
+			<h3>No events found</h3>
+			<p>Try adjusting your filters or check that events have been ingested.</p>
+		</div>
+	}
+}
+
+func buildEventsURL(filter EventFilter, offset int) string {
+	return fmt.Sprintf("/admin/api/events?offset=%d&limit=%d&app_id=%s&event_category=%s&event_type=%s&start_date=%s&end_date=%s",
+		offset, filter.Limit, filter.AppID, filter.EventCategory, filter.EventType, filter.StartDate, filter.EndDate)
+}

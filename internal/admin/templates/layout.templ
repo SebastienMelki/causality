@@ -1,0 +1,112 @@
+package templates
+
+import "strings"
+
+type PageData struct {
+	Title       string
+	CurrentPath string
+}
+
+templ Layout(data PageData) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ data.Title } - Causality Admin</title>
+			<link rel="stylesheet" href="/static/css/admin.css"/>
+			<script src="/static/js/htmx.min.js"></script>
+		</head>
+		<body>
+			<div class="admin-layout">
+				@Sidebar(data.CurrentPath)
+				<main class="main-content">
+					{ children... }
+				</main>
+			</div>
+			<div id="flash-container" class="flash-container"></div>
+			<script>
+				document.body.addEventListener('showFlash', function(evt) {
+					const flash = evt.detail;
+					const container = document.getElementById('flash-container');
+					const div = document.createElement('div');
+					div.className = 'flash flash-' + flash.type;
+					div.textContent = flash.message;
+					container.appendChild(div);
+					setTimeout(() => div.remove(), 5000);
+				});
+				document.body.addEventListener('htmx:confirm', function(evt) {
+					if (evt.detail.question) {
+						evt.preventDefault();
+						if (confirm(evt.detail.question)) {
+							evt.detail.issueRequest();
+						}
+					}
+				});
+			</script>
+		</body>
+	</html>
+}
+
+func isActive(currentPath, linkPath string) bool {
+	if linkPath == "/admin/" {
+		return currentPath == "/admin/"
+	}
+	return strings.HasPrefix(currentPath, linkPath)
+}
+
+templ Sidebar(currentPath string) {
+	<aside class="sidebar">
+		<div class="sidebar-header">
+			<h1>Causality</h1>
+			<span>Admin Panel</span>
+		</div>
+		<nav class="sidebar-nav">
+			<div class="nav-section">
+				<div class="nav-section-title">Overview</div>
+				<a href="/admin/" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+					</svg>
+					Dashboard
+				</a>
+			</div>
+			<div class="nav-section">
+				<div class="nav-section-title">Configuration</div>
+				<a href="/admin/rules" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/rules")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+					</svg>
+					Rules
+				</a>
+				<a href="/admin/webhooks" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/webhooks")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+					</svg>
+					Webhooks
+				</a>
+				<a href="/admin/anomaly-configs" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/anomaly-configs")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+					</svg>
+					Anomaly Detection
+				</a>
+			</div>
+			<div class="nav-section">
+				<div class="nav-section-title">Data</div>
+				<a href="/admin/events" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/events")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+					</svg>
+					Event Browser
+				</a>
+				<a href="/admin/custom-events" class={ "nav-link", templ.KV("active", isActive(currentPath, "/admin/custom-events")) }>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+					</svg>
+					Custom Event Types
+				</a>
+			</div>
+		</nav>
+	</aside>
+}

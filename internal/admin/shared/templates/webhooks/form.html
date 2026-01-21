@@ -1,0 +1,88 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">{{if .Data.IsEdit}}Edit Webhook{{else}}New Webhook{{end}}</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form {{if .Data.IsEdit}}hx-put="/admin/webhooks/{{.Data.Webhook.ID}}"{{else}}hx-post="/admin/webhooks"{{end}}
+              hx-target="body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="name">Name *</label>
+                    <input type="text" class="form-control {{if index .Data.Errors "name"}}is-invalid{{end}}"
+                           id="name" name="name" value="{{.Data.Webhook.Name}}" required>
+                    {{if index .Data.Errors "name"}}
+                    <div class="form-error">{{index .Data.Errors "name"}}</div>
+                    {{end}}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="timeout_ms">Timeout (ms)</label>
+                    <input type="number" class="form-control" id="timeout_ms" name="timeout_ms"
+                           value="{{.Data.Webhook.TimeoutMs}}" min="1000" max="60000">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="url">URL *</label>
+                <input type="url" class="form-control {{if index .Data.Errors "url"}}is-invalid{{end}}"
+                       id="url" name="url" value="{{.Data.Webhook.URL}}" required
+                       placeholder="https://example.com/webhook">
+                {{if index .Data.Errors "url"}}
+                <div class="form-error">{{index .Data.Errors "url"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="auth_type">Authentication Type</label>
+                <select class="form-control" id="auth_type" name="auth_type">
+                    <option value="none" {{if eq .Data.Webhook.AuthType "none"}}selected{{end}}>None</option>
+                    <option value="basic" {{if eq .Data.Webhook.AuthType "basic"}}selected{{end}}>Basic Auth</option>
+                    <option value="bearer" {{if eq .Data.Webhook.AuthType "bearer"}}selected{{end}}>Bearer Token</option>
+                    <option value="hmac" {{if eq .Data.Webhook.AuthType "hmac"}}selected{{end}}>HMAC Signature</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="auth_config">Auth Configuration (JSON)</label>
+                <textarea class="form-control {{if index .Data.Errors "auth_config"}}is-invalid{{end}}"
+                          id="auth_config" name="auth_config" rows="3" style="font-family: var(--font-mono);">{{printf "%s" .Data.Webhook.AuthConfig}}</textarea>
+                <div class="form-text">
+                    Basic: {"username": "user", "password": "pass"}<br>
+                    Bearer: {"token": "your-token"}<br>
+                    HMAC: {"secret": "your-secret", "header": "X-Signature"}
+                </div>
+                {{if index .Data.Errors "auth_config"}}
+                <div class="form-error">{{index .Data.Errors "auth_config"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="headers">Additional Headers (JSON)</label>
+                <textarea class="form-control {{if index .Data.Errors "headers"}}is-invalid{{end}}"
+                          id="headers" name="headers" rows="3" style="font-family: var(--font-mono);">{{printf "%s" .Data.Webhook.Headers}}</textarea>
+                <div class="form-text">{"X-Custom-Header": "value"}</div>
+                {{if index .Data.Errors "headers"}}
+                <div class="form-error">{{index .Data.Errors "headers"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" class="form-check-input" name="enabled" {{if .Data.Webhook.Enabled}}checked{{end}}>
+                    <span>Enabled</span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-primary">
+                    {{if .Data.IsEdit}}Update Webhook{{else}}Create Webhook{{end}}
+                </button>
+                <a href="/admin/webhooks" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

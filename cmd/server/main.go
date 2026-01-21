@@ -3,12 +3,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/caarlos0/env/v10"
+	_ "github.com/lib/pq"
 
 	"github.com/SebastienMelki/causality/internal/gateway"
 	"github.com/SebastienMelki/causality/internal/nats"
@@ -51,6 +54,7 @@ func run() error {
 		"log_level", cfg.LogLevel,
 		"http_addr", cfg.Gateway.Addr,
 		"nats_url", cfg.NATS.URL,
+		"admin_enabled", cfg.Gateway.Admin.Enabled,
 	)
 
 	// Create context with cancellation
@@ -77,8 +81,19 @@ func run() error {
 	// Create publisher
 	publisher := nats.NewPublisher(natsClient.JetStream(), cfg.NATS.Stream.Name, logger)
 
+	// Connect to PostgreSQL if admin is enabled
+	var db *sql.DB
+	if cfg.Gateway.Admin.Enabled {
+		db, err = connectDB(cfg.Gateway.Database, logger)
+		if err != nil {
+			logger.Warn("failed to connect to database, admin UI will have limited functionality", "error", err)
+		} else {
+			defer db.Close()
+		}
+	}
+
 	// Create and start HTTP server
-	server, err := gateway.NewServer(cfg.Gateway, natsClient, publisher, logger)
+	server, err := gateway.NewServer(cfg.Gateway, natsClient, publisher, db, logger)
 	if err != nil {
 		return err
 	}
@@ -113,6 +128,30 @@ func run() error {
 
 	logger.Info("server stopped")
 	return nil
+}
+
+// connectDB connects to PostgreSQL.
+func connectDB(cfg gateway.DatabaseConfig, logger *slog.Logger) (*sql.DB, error) {
+	db, err := sql.Open("postgres", cfg.DSN())
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	logger.Info("connected to PostgreSQL", "host", cfg.Host, "database", cfg.Name)
+	return db, nil
 }
 
 // setupLogger creates a logger based on configuration.

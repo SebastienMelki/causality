@@ -1,0 +1,72 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">Event Browser</h1>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h2 class="card-title">Filters</h2>
+    </div>
+    <div class="card-body">
+        <form hx-get="/admin/api/events" hx-target="#events-table" hx-swap="innerHTML">
+            <div class="filters">
+                <div class="filter-group">
+                    <label class="filter-label" for="app_id">App ID</label>
+                    <select class="form-control" id="app_id" name="app_id" style="width: 200px;">
+                        <option value="">All Apps</option>
+                        {{range .Data.AppIDs}}
+                        <option value="{{.}}" {{if eq . $.Data.Filter.AppID}}selected{{end}}>{{.}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label" for="event_category">Category</label>
+                    <select class="form-control" id="event_category" name="event_category" style="width: 150px;">
+                        <option value="">All Categories</option>
+                        {{range .Data.Categories}}
+                        <option value="{{.}}" {{if eq . $.Data.Filter.EventCategory}}selected{{end}}>{{.}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label" for="event_type">Event Type</label>
+                    <select class="form-control" id="event_type" name="event_type" style="width: 180px;">
+                        <option value="">All Types</option>
+                        {{range .Data.EventTypes}}
+                        <option value="{{.}}" {{if eq . $.Data.Filter.EventType}}selected{{end}}>{{.}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label" for="start_date">Start Date</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date"
+                           value="{{.Data.Filter.StartDate}}" style="width: 150px;">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label" for="end_date">End Date</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date"
+                           value="{{.Data.Filter.EndDate}}" style="width: 150px;">
+                </div>
+                <div class="filter-group" style="align-self: flex-end;">
+                    <button type="submit" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        Search
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        <div id="events-table">
+            {{template "events/table.html" .Data}}
+        </div>
+    </div>
+</div>
+{{end}}

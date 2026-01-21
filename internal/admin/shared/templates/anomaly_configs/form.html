@@ -1,0 +1,106 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">{{if .Data.IsEdit}}Edit Anomaly Config{{else}}New Anomaly Config{{end}}</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form {{if .Data.IsEdit}}hx-put="/admin/anomaly-configs/{{.Data.Config.ID}}"{{else}}hx-post="/admin/anomaly-configs"{{end}}
+              hx-target="body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="name">Name *</label>
+                    <input type="text" class="form-control {{if index .Data.Errors "name"}}is-invalid{{end}}"
+                           id="name" name="name" value="{{.Data.Config.Name}}" required>
+                    {{if index .Data.Errors "name"}}
+                    <div class="form-error">{{index .Data.Errors "name"}}</div>
+                    {{end}}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cooldown_seconds">Cooldown (seconds)</label>
+                    <input type="number" class="form-control" id="cooldown_seconds" name="cooldown_seconds"
+                           value="{{.Data.Config.CooldownSeconds}}" min="0">
+                    <div class="form-text">Minimum time between alerts for this config</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="description">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="2">{{.Data.Config.Description}}</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="app_id">App ID</label>
+                    <input type="text" class="form-control" id="app_id" name="app_id"
+                           value="{{if .Data.Config.AppID.Valid}}{{.Data.Config.AppID.String}}{{end}}"
+                           placeholder="Leave empty for all apps">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="event_category">Event Category</label>
+                    <select class="form-control" id="event_category" name="event_category">
+                        <option value="">All Categories</option>
+                        <option value="navigation" {{if eq .Data.Config.EventCategory.String "navigation"}}selected{{end}}>Navigation</option>
+                        <option value="interaction" {{if eq .Data.Config.EventCategory.String "interaction"}}selected{{end}}>Interaction</option>
+                        <option value="authentication" {{if eq .Data.Config.EventCategory.String "authentication"}}selected{{end}}>Authentication</option>
+                        <option value="commerce" {{if eq .Data.Config.EventCategory.String "commerce"}}selected{{end}}>Commerce</option>
+                        <option value="lifecycle" {{if eq .Data.Config.EventCategory.String "lifecycle"}}selected{{end}}>Lifecycle</option>
+                        <option value="system" {{if eq .Data.Config.EventCategory.String "system"}}selected{{end}}>System</option>
+                        <option value="custom" {{if eq .Data.Config.EventCategory.String "custom"}}selected{{end}}>Custom</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="event_type">Event Type</label>
+                <input type="text" class="form-control" id="event_type" name="event_type"
+                       value="{{if .Data.Config.EventType.Valid}}{{.Data.Config.EventType.String}}{{end}}"
+                       placeholder="Leave empty for all types">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="detection_type">Detection Type *</label>
+                <select class="form-control {{if index .Data.Errors "detection_type"}}is-invalid{{end}}"
+                        id="detection_type" name="detection_type" required>
+                    <option value="threshold" {{if eq .Data.Config.DetectionType "threshold"}}selected{{end}}>Threshold</option>
+                    <option value="rate" {{if eq .Data.Config.DetectionType "rate"}}selected{{end}}>Rate</option>
+                    <option value="count" {{if eq .Data.Config.DetectionType "count"}}selected{{end}}>Count</option>
+                </select>
+                {{if index .Data.Errors "detection_type"}}
+                <div class="form-error">{{index .Data.Errors "detection_type"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="config">Detection Config (JSON)</label>
+                <textarea class="form-control {{if index .Data.Errors "config"}}is-invalid{{end}}"
+                          id="config" name="config" rows="4" style="font-family: var(--font-mono);">{{printf "%s" .Data.Config.Config}}</textarea>
+                <div class="form-text">
+                    <strong>Threshold:</strong> {"path": "$.field", "min": 0, "max": 100}<br>
+                    <strong>Rate:</strong> {"max_per_minute": 100}<br>
+                    <strong>Count:</strong> {"window_seconds": 60, "max_count": 1000}
+                </div>
+                {{if index .Data.Errors "config"}}
+                <div class="form-error">{{index .Data.Errors "config"}}</div>
+                {{end}}
+            </div>
+
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" class="form-check-input" name="enabled" {{if .Data.Config.Enabled}}checked{{end}}>
+                    <span>Enabled</span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-primary">
+                    {{if .Data.IsEdit}}Update Config{{else}}Create Config{{end}}
+                </button>
+                <a href="/admin/anomaly-configs" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
