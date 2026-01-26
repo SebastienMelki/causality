@@ -52,16 +52,21 @@ Central event collection point:
 - Protocol Buffer request/response handling
 - Event validation and enrichment
 - Publishes events to NATS JetStream
+- Serves Admin UI for configuration management
 
 **Endpoints:**
 - `POST /v1/events/ingest` - Single event ingestion
 - `POST /v1/events/batch` - Batch event ingestion
 - `GET /health` - Health check
 - `GET /ready` - Readiness check
+- `GET /admin/*` - Admin UI
 
 **Configuration:**
 - `HTTP_ADDR`: Listen address (default: `:8080`)
 - `NATS_URL`: NATS server URL (default: `nats://localhost:4222`)
+- `ADMIN_ENABLED`: Enable admin UI (default: `true`)
+- `DATABASE_*`: PostgreSQL connection for admin data
+- `TRINO_*`: Trino connection for event browser
 
 ### 2. NATS JetStream
 
@@ -163,6 +168,34 @@ Data visualization and dashboards:
 - SQL query interface
 - Dashboard builder
 - Alert configuration
+
+### 9. Admin UI (`internal/admin`)
+
+Web-based configuration management:
+- Built with templ (type-safe HTML templating) + HTMX
+- Embedded static assets (CSS, JS)
+- Connects to PostgreSQL for configuration storage
+- Connects to Trino for event browsing
+
+**Features:**
+- **Dashboard**: Overview stats for rules, webhooks, anomaly configs
+- **Rules Management**: CRUD for event matching rules
+  - JSONPath conditions with operators (eq, contains, regex, etc.)
+  - Actions: trigger webhooks, publish to NATS
+- **Webhooks Management**: CRUD for webhook endpoints
+  - Auth types: none, basic, bearer, HMAC
+  - Test functionality
+- **Anomaly Detection**: CRUD for anomaly configs
+  - Threshold-based detection
+  - Rate-based detection
+  - Count-based detection
+- **Event Browser**: Query events from Trino with filters
+- **Custom Event Types**: Define custom event schemas
+
+**Tech Stack:**
+- templ: Type-safe HTML templating for Go
+- HTMX: Dynamic interactions without JavaScript
+- Embedded CSS/JS via Go's embed directive
 
 ## Data Flow
 

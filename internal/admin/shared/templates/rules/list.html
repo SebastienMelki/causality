@@ -1,0 +1,46 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">Rules</h1>
+    <a href="/admin/rules/new" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        New Rule
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        {{if .Data.Rules}}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>App ID</th>
+                    <th>Event Type</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="rules-list">
+                {{range .Data.Rules}}
+                {{template "rules/row.html" .}}
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <h3>No rules yet</h3>
+            <p>Create your first rule to start matching events.</p>
+            <a href="/admin/rules/new" class="btn btn-primary">Create Rule</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

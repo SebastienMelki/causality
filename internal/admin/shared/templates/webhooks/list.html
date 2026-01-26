@@ -1,0 +1,69 @@
+
+
+{{define "content"}}
+<div class="page-header">
+    <h1 class="page-title">Webhooks</h1>
+    <a href="/admin/webhooks/new" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        New Webhook
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        {{if .Data.Webhooks}}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>URL</th>
+                    <th>Auth Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Data.Webhooks}}
+                <tr id="webhook-{{.ID}}">
+                    <td><strong>{{.Name}}</strong></td>
+                    <td class="code-block" style="padding: 0.5rem; font-size: 0.75rem;">{{truncate .URL 50}}</td>
+                    <td><span class="badge badge-info">{{.AuthType}}</span></td>
+                    <td>
+                        {{if .Enabled}}
+                        <span class="badge badge-success">Enabled</span>
+                        {{else}}
+                        <span class="badge badge-secondary">Disabled</span>
+                        {{end}}
+                    </td>
+                    <td class="table-actions">
+                        <button class="btn btn-sm btn-secondary"
+                                hx-post="/admin/webhooks/{{.ID}}/test"
+                                hx-swap="none">
+                            Test
+                        </button>
+                        <a href="/admin/webhooks/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                        <button class="btn btn-sm btn-danger"
+                                hx-delete="/admin/webhooks/{{.ID}}"
+                                hx-confirm="Are you sure you want to delete this webhook?">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+            </svg>
+            <h3>No webhooks yet</h3>
+            <p>Create your first webhook to receive event notifications.</p>
+            <a href="/admin/webhooks/new" class="btn btn-primary">Create Webhook</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

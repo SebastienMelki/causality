@@ -1,0 +1,42 @@
+package templates
+
+import "strconv"
+
+type DashboardStats struct {
+	TotalRules          int
+	EnabledRules        int
+	TotalWebhooks       int
+	EnabledWebhooks     int
+	TotalAnomalyConfigs int
+	EnabledAnomalyConfigs int
+	TotalCustomEvents   int
+}
+
+templ DashboardPage(stats DashboardStats) {
+	@Layout(PageData{Title: "Dashboard", CurrentPath: "/admin/"}) {
+		<div class="page-header">
+			<h1 class="page-title">Dashboard</h1>
+		</div>
+		<div class="stats-grid">
+			<div class="stat-card">
+				<div class="stat-label">Total Rules</div>
+				<div class="stat-value">{ strconv.Itoa(stats.TotalRules) }</div>
+				<div class="form-text">{ strconv.Itoa(stats.EnabledRules) } enabled</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-label">Total Webhooks</div>
+				<div class="stat-value">{ strconv.Itoa(stats.TotalWebhooks) }</div>
+				<div class="form-text">{ strconv.Itoa(stats.EnabledWebhooks) } enabled</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-label">Anomaly Configs</div>
+				<div class="stat-value">{ strconv.Itoa(stats.TotalAnomalyConfigs) }</div>
+				<div class="form-text">{ strconv.Itoa(stats.EnabledAnomalyConfigs) } enabled</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-label">Custom Event Types</div>
+				<div class="stat-value">{ strconv.Itoa(stats.TotalCustomEvents) }</div>
+			</div>
+		</div>
+	}
+}

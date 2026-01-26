@@ -374,9 +374,14 @@ dev-wait: ## Wait for services to be healthy
 dev-logs: docker-logs ## Tail all logs (alias)
 
 dev-rebuild: ## Rebuild and restart only the Go services (uses cache)
+	@echo "Ensuring all services are running..."
+	@docker-compose up -d
+	@echo "Rebuilding Go services..."
 	@docker-compose up -d --build --force-recreate causality-server warehouse-sink reaction-engine
 
 dev-rebuild-clean: ## Rebuild Go services from scratch (no cache)
+	@echo "Ensuring all services are running..."
+	@docker-compose up -d
 	@echo "Rebuilding Go services without cache..."
 	@docker-compose build --no-cache causality-server warehouse-sink reaction-engine
 	@docker-compose up -d --force-recreate causality-server warehouse-sink reaction-engine

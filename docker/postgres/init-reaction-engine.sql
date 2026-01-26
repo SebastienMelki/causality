@@ -125,6 +125,20 @@ CREATE TABLE anomaly_state (
 CREATE INDEX idx_anomaly_state_config_app ON anomaly_state(anomaly_config_id, app_id);
 CREATE INDEX idx_anomaly_state_window ON anomaly_state(window_key);
 
+-- Custom event types table: stores custom event type definitions
+CREATE TABLE custom_event_types (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    category VARCHAR(100) NOT NULL DEFAULT 'custom',
+    schema JSONB NOT NULL DEFAULT '{}', -- JSON Schema for parameters
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_custom_event_types_category ON custom_event_types(category);
+CREATE INDEX idx_custom_event_types_name ON custom_event_types(name);
+
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -149,6 +163,10 @@ CREATE TRIGGER update_anomaly_configs_updated_at
 
 CREATE TRIGGER update_anomaly_state_updated_at
     BEFORE UPDATE ON anomaly_state
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_custom_event_types_updated_at
+    BEFORE UPDATE ON custom_event_types
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Grant permissions

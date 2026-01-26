@@ -184,8 +184,15 @@ func RateLimit(cfg RateLimitConfig) Middleware {
 }
 
 // ContentType ensures the correct content type for API responses.
+// Skips admin and static routes which handle their own content types.
 func ContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		// Skip admin UI and static files - they set their own Content-Type
+		if strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		next.ServeHTTP(w, r)
 	})

@@ -14,6 +14,7 @@ Causality is a behavioral analysis system that collects events from mobile (iOS/
 - **Apache Parquet** - Columnar storage format
 - **Trino** - SQL query engine
 - **Redash** - Data visualization
+- **Templ** - Type-safe HTML templating for Admin UI
 
 Module: `github.com/SebastienMelki/causality`
 
@@ -35,6 +36,9 @@ make test-random     # Random varied events (for graphs)
 make trino-cli       # Open Trino CLI
 make trino-sync      # Sync partitions from S3
 make trino-stats     # View event statistics
+
+# Admin UI
+# Open http://localhost:8080/admin for configuration management
 ```
 
 ## Common Commands
@@ -95,6 +99,14 @@ causality/
 │   ├── warehouse-sink/   # NATS consumer → Parquet → S3
 │   └── reaction-engine/  # Rule evaluation and anomaly detection
 ├── internal/
+│   ├── admin/            # Admin UI (templ + HTMX)
+│   │   ├── templates/    # Templ component files
+│   │   ├── shared/       # Static assets (CSS, JS)
+│   │   ├── rules/        # Rules management
+│   │   ├── webhooks/     # Webhooks management
+│   │   ├── anomalyconfigs/ # Anomaly detection config
+│   │   ├── events/       # Event browser (Trino)
+│   │   └── customevents/ # Custom event types
 │   ├── events/           # Shared event categorization
 │   ├── gateway/          # HTTP routing and handlers
 │   ├── nats/             # JetStream client
@@ -142,6 +154,7 @@ Mobile/Web Apps → HTTP Server → NATS JetStream ─┬→ Warehouse Sink → 
 - Endpoints: `/v1/events/ingest`, `/v1/events/batch`
 - Health checks: `/health`, `/ready`
 - Publishes events to NATS
+- Serves Admin UI at `/admin`
 
 #### Warehouse Sink (`cmd/warehouse-sink`)
 - Consumes events from NATS JetStream
@@ -166,11 +179,22 @@ Mobile/Web Apps → HTTP Server → NATS JetStream ─┬→ Warehouse Sink → 
 - Auto-configures Trino data source
 - Scripts: `docker/redash/`
 
+#### Admin UI (`internal/admin`)
+- Web-based configuration management at `/admin`
+- Built with templ (type-safe HTML) + HTMX
+- **Dashboard**: Overview stats for rules, webhooks, anomaly configs
+- **Rules**: CRUD for event matching rules with JSONPath conditions
+- **Webhooks**: CRUD for webhook endpoints with auth configuration
+- **Anomaly Configs**: CRUD for anomaly detection (threshold/rate/count)
+- **Events Browser**: Query events from Trino with filters
+- **Custom Event Types**: Define custom event schemas
+
 ## Service Ports
 
 | Service | Port | URL |
 |---------|------|-----|
 | HTTP Server | 8080 | http://localhost:8080 |
+| Admin UI | 8080 | http://localhost:8080/admin |
 | NATS | 4222 | nats://localhost:4222 |
 | NATS Monitoring | 8222 | http://localhost:8222 |
 | MinIO API | 9000 | http://localhost:9000 |

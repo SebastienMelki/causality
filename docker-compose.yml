@@ -225,6 +225,10 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -232,6 +236,22 @@ services:
       NATS_URL: "nats://nats:4222"
       LOG_LEVEL: "info"
       LOG_FORMAT: "json"
+      # Admin UI
+      ADMIN_ENABLED: "true"
+      ADMIN_BASE_PATH: "/admin"
+      # Database
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USER: "hive"
+      DATABASE_PASSWORD: "hive"
+      DATABASE_NAME: "reaction_engine"
+      DATABASE_SSL_MODE: "disable"
+      # Trino
+      TRINO_HOST: "trino"
+      TRINO_PORT: "8080"
+      TRINO_CATALOG: "hive"
+      TRINO_SCHEMA: "causality"
+      TRINO_USER: "trino"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 5s

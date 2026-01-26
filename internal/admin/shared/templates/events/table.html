@@ -1,0 +1,66 @@
+{{define "events/table.html"}}
+{{if .Result.Events}}
+<table class="table">
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>App ID</th>
+            <th>Category</th>
+            <th>Event Type</th>
+            <th>Device ID</th>
+            <th>Platform</th>
+            <th>Parameters</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Result.Events}}
+        <tr>
+            <td style="white-space: nowrap;">{{formatTime .Timestamp}}</td>
+            <td>{{.AppID}}</td>
+            <td><span class="badge badge-info">{{.EventCategory}}</span></td>
+            <td>{{.EventType}}</td>
+            <td>{{if .DeviceID}}{{truncate .DeviceID 20}}{{else}}<span class="badge badge-secondary">-</span>{{end}}</td>
+            <td>{{if .Platform}}{{.Platform}}{{else}}<span class="badge badge-secondary">-</span>{{end}}</td>
+            <td>
+                <div class="code-block" style="max-width: 300px; overflow: auto; font-size: 0.7rem;">
+                    {{truncate .Parameters 100}}
+                </div>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {{if gt .Filter.Offset 0}}
+    <a href="#" class="pagination-link"
+       hx-get="/admin/api/events?offset={{sub .Filter.Offset .Filter.Limit}}&limit={{.Filter.Limit}}&app_id={{.Filter.AppID}}&event_category={{.Filter.EventCategory}}&event_type={{.Filter.EventType}}&start_date={{.Filter.StartDate}}&end_date={{.Filter.EndDate}}"
+       hx-target="#events-table"
+       hx-swap="innerHTML">
+        &larr; Previous
+    </a>
+    {{end}}
+
+    <span style="padding: 0 1rem; color: var(--text-muted);">
+        Showing {{add .Filter.Offset 1}} - {{add .Filter.Offset (len .Result.Events)}}
+    </span>
+
+    {{if .Result.HasMore}}
+    <a href="#" class="pagination-link"
+       hx-get="/admin/api/events?offset={{add .Filter.Offset .Filter.Limit}}&limit={{.Filter.Limit}}&app_id={{.Filter.AppID}}&event_category={{.Filter.EventCategory}}&event_type={{.Filter.EventType}}&start_date={{.Filter.StartDate}}&end_date={{.Filter.EndDate}}"
+       hx-target="#events-table"
+       hx-swap="innerHTML">
+        Next &rarr;
+    </a>
+    {{end}}
+</div>
+{{else}}
+<div class="empty-state">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+    </svg>
+    <h3>No events found</h3>
+    <p>Try adjusting your filters or check that events have been ingested.</p>
+</div>
+{{end}}
+{{end}}
