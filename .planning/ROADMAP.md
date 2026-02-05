@@ -4,7 +4,7 @@
 **Milestone:** v1.0 — Complete analytics platform with LLM differentiator
 **Created:** 2026-02-05
 **Phases:** 6
-**Status:** In progress (Phase 1 complete)
+**Status:** In progress (Phase 1 complete, Phase 2 planned)
 
 ## Overview
 
@@ -104,7 +104,20 @@ Plans:
 - [ ] Offline events sent when connectivity returns
 - [ ] Device context auto-populated
 
-**Plans:** TBD (use `/gsd:plan-phase 2`)
+**Plans:** 11 plans in 7 waves
+
+Plans:
+- [ ] 02-01-PLAN.md — Go mobile core package with JSON bridge API (R2.2)
+- [ ] 02-02-PLAN.md — SQLite persistent event queue with modernc.org/sqlite (R2.3)
+- [ ] 02-03-PLAN.md — Hybrid session tracking (timeout + lifecycle) (R2.7)
+- [ ] 02-04-PLAN.md — Device context collection and user identity management (R2.6)
+- [ ] 02-05-PLAN.md — Batch flushing with dual triggers and HTTP transport with retry (R2.4, R2.5)
+- [ ] 02-06-PLAN.md — SDK wiring and gomobile build infrastructure (R2.1)
+- [ ] 02-07-PLAN.md — Swift wrapper with async/await and SPM package (R2.8)
+- [ ] 02-08-PLAN.md — Kotlin wrapper with coroutines and DSL builders (R2.8)
+- [ ] 02-09-PLAN.md — iOS example apps (UIKit + SwiftUI) (R2.8)
+- [ ] 02-10-PLAN.md — Android example apps (Views + Compose) (R2.8)
+- [ ] 02-11-PLAN.md — Integration verification checkpoint
 
 **Key risks:**
 - gomobile type restrictions: must design JSON bridge API carefully (irreversible)
@@ -271,4 +284,4 @@ Plans:
 
 ---
 *Created: 2026-02-05*
-*Next action: `/gsd:execute-phase 1` to execute Phase 1 plans*
+*Next action: `/gsd:execute-phase 2` to execute Phase 2 plans*
