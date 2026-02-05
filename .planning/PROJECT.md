@@ -82,8 +82,20 @@ Anyone on the team can understand what users are doing in any app — by asking 
 | React+TS for analytics app | Rich interactivity needed for dashboards/charts/SQL editor; large ecosystem | — Pending |
 | templ+htmx for public pages | SEO-friendly, server-rendered, keeps Go as the primary language | — Pending |
 | LLM analysis in v1 | Core differentiator; without it, this is just another self-hosted analytics tool | — Pending |
-| Kubernetes from day one | Multi-service architecture demands orchestration; avoids Compose-to-K8s migration pain | — Pending |
+| Kubernetes from day one | Deferred — Docker Compose sufficient for internal use; K8s adds premature complexity | — Deferred to v2.0 |
 | Text-to-SQL as LLM starting point | Simpler than full agent; Trino SQL is well-documented; can iterate toward agentic later | — Pending |
+| Go backend SDK bundled with Phase 1 | Thin HTTP client, simplest SDK — natural fit with pipeline hardening phase | — Pending |
+| Full v1.0 scope (6 phases) | Pipeline hardening → gomobile SDK → Web app → LLM → Web SDK → Public pages | — Scoped |
+
+## Milestones
+
+### v1.0 — Complete Analytics Platform with LLM Differentiator
+**Status:** Requirements defined, roadmap created, not started
+**Phases:** 6 (see `.planning/ROADMAP.md`)
+**Scope:** Pipeline hardening + Go SDK, gomobile SDK, React analytics web app, LLM text-to-SQL, web SDK, templ+htmx public pages
+
+### v2.0 — Advanced Analytics & Production Deployment (future)
+**Scope:** Funnel/retention/user paths, Kubernetes + Helm, agentic LLM
 
 ---
-*Last updated: 2026-02-05 after initialization*
+*Last updated: 2026-02-05 after requirements and roadmap definition*
