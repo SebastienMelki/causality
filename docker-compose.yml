@@ -277,11 +277,14 @@ services:
       dockerfile: Dockerfile
       target: reaction-engine
     container_name: causality-reaction-engine
+    stop_grace_period: 1m
     depends_on:
       nats:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    ports:
+      - "9091:9091"   # Prometheus metrics
     environment:
       NATS_URL: "nats://nats:4222"
       DATABASE_HOST: "postgres"
@@ -291,6 +294,10 @@ services:
       DATABASE_NAME: "reaction_engine"
       DATABASE_SSL_MODE: "disable"
       CONSUMER_NAME: "analysis-engine"
+      METRICS_ADDR: ":9091"
+      SHUTDOWN_TIMEOUT: "30s"
+      CONSUMER_WORKER_COUNT: "2"
+      CONSUMER_FETCH_BATCH_SIZE: "100"
       ENGINE_RULE_REFRESH_INTERVAL: "30s"
       DISPATCHER_WORKERS: "5"
       DISPATCHER_POLL_INTERVAL: "1s"
