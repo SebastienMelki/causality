@@ -11,8 +11,16 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/SebastienMelki/causality/internal/observability"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
+
+// trackedEvent pairs a deserialized event with its original NATS message so
+// that ACK/NAK can be deferred until after the S3 write succeeds or fails.
+type trackedEvent struct {
+	event *pb.EventEnvelope
+	msg   jetstream.Msg
+}
 
 // Consumer consumes events from NATS JetStream and writes them to S3.
 type Consumer struct {
@@ -21,14 +29,15 @@ type Consumer struct {
 	s3Client     *S3Client
 	parquet      *ParquetWriter
 	logger       *slog.Logger
+	metrics      *observability.Metrics
 	consumerName string
 	streamName   string
 
-	mu       sync.Mutex
-	batch    []*pb.EventEnvelope
+	mu        sync.Mutex
+	batch     []trackedEvent
 	lastFlush time.Time
-	stopCh   chan struct{}
-	doneCh   chan struct{}
+	stopCh    chan struct{}
+	doneCh    chan struct{}
 }
 
 // NewConsumer creates a new warehouse consumer.
@@ -39,6 +48,7 @@ func NewConsumer(
 	consumerName string,
 	streamName string,
 	logger *slog.Logger,
+	metrics *observability.Metrics,
 ) *Consumer {
 	if logger == nil {
 		logger = slog.Default()
@@ -50,18 +60,19 @@ func NewConsumer(
 		s3Client:     s3Client,
 		parquet:      NewParquetWriter(cfg.Parquet),
 		logger:       logger.With("component", "warehouse-consumer"),
+		metrics:      metrics,
 		consumerName: consumerName,
 		streamName:   streamName,
-		batch:        make([]*pb.EventEnvelope, 0, cfg.Batch.MaxEvents),
+		batch:        make([]trackedEvent, 0, cfg.Batch.MaxEvents),
 		lastFlush:    time.Now(),
 		stopCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}
 }
 
-// Start starts consuming events from NATS.
+// Start starts consuming events from NATS with a configurable worker pool.
 func (c *Consumer) Start(ctx context.Context) error {
-	// Get consumer
+	// Get stream and consumer
 	stream, err := c.js.Stream(ctx, c.streamName)
 	if err != nil {
 		return fmt.Errorf("failed to get stream: %w", err)
@@ -72,81 +83,113 @@ func (c *Consumer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to get consumer: %w", err)
 	}
 
+	workerCount := c.config.Batch.WorkerCount
+	if workerCount < 1 {
+		workerCount = 1
+	}
+
 	c.logger.Info("starting warehouse consumer",
 		"consumer", c.consumerName,
 		"stream", c.streamName,
+		"workers", workerCount,
+		"fetch_batch_size", c.config.Batch.FetchBatchSize,
 	)
 
 	// Start flush timer
 	go c.flushTimer(ctx)
 
-	// Start consuming
+	// Start worker pool
+	var wg sync.WaitGroup
+	for i := range workerCount {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			c.workerLoop(ctx, consumer, id)
+		}(i)
+	}
+
+	// Close doneCh when all workers finish
 	go func() {
-		defer close(c.doneCh)
-
-		for {
-			select {
-			case <-ctx.Done():
-				c.logger.Info("context cancelled, stopping consumer")
-				return
-			case <-c.stopCh:
-				c.logger.Info("stop signal received, stopping consumer")
-				return
-			default:
-				// Fetch messages
-				msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(5*time.Second))
-				if err != nil {
-					if !errors.Is(err, context.DeadlineExceeded) {
-						c.logger.Error("failed to fetch messages", "error", err)
-					}
-					continue
-				}
-
-				for msg := range msgs.Messages() {
-					if err := c.processMessage(ctx, msg); err != nil {
-						c.logger.Error("failed to process message", "error", err)
-						// NAK to retry later
-						if nakErr := msg.Nak(); nakErr != nil {
-							c.logger.Error("failed to NAK message", "error", nakErr)
-						}
-						continue
-					}
-
-					// ACK successful processing
-					if err := msg.Ack(); err != nil {
-						c.logger.Error("failed to ACK message", "error", err)
-					}
-				}
-
-				if err := msgs.Error(); err != nil {
-					c.logger.Error("messages error", "error", err)
-				}
-			}
-		}
+		wg.Wait()
+		close(c.doneCh)
 	}()
 
 	return nil
 }
 
-// processMessage processes a single NATS message.
-func (c *Consumer) processMessage(ctx context.Context, msg jetstream.Msg) error {
+// workerLoop is the main loop for a single fetch worker. It pulls messages
+// from the NATS consumer and processes them. ACK/NAK is deferred to flush.
+func (c *Consumer) workerLoop(ctx context.Context, consumer jetstream.Consumer, id int) {
+	logger := c.logger.With("worker_id", id)
+	logger.Debug("worker started")
+	defer logger.Debug("worker stopped")
+
+	fetchSize := c.config.Batch.FetchBatchSize
+	if fetchSize < 1 {
+		fetchSize = 100
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopCh:
+			return
+		default:
+			msgs, err := consumer.Fetch(fetchSize, jetstream.FetchMaxWait(5*time.Second))
+			if err != nil {
+				if !errors.Is(err, context.DeadlineExceeded) {
+					logger.Error("failed to fetch messages", "error", err)
+					// Brief backoff before retrying on unexpected errors
+					select {
+					case <-time.After(time.Second):
+					case <-ctx.Done():
+						return
+					case <-c.stopCh:
+						return
+					}
+				}
+				continue
+			}
+
+			for msg := range msgs.Messages() {
+				c.processMessage(ctx, msg)
+			}
+
+			if err := msgs.Error(); err != nil {
+				logger.Error("messages iteration error", "error", err)
+			}
+		}
+	}
+}
+
+// processMessage deserializes a single NATS message and adds it to the batch.
+// Poison messages (unmarshal failures) are terminated immediately so they are
+// not redelivered. Valid messages are tracked and ACKed/NAKed later in flush.
+func (c *Consumer) processMessage(ctx context.Context, msg jetstream.Msg) {
 	var event pb.EventEnvelope
 	if err := proto.Unmarshal(msg.Data(), &event); err != nil {
-		return fmt.Errorf("failed to unmarshal event: %w", err)
+		// Poison message: terminate to prevent infinite redelivery
+		c.logger.Error("poison message: unmarshal failure, terminating",
+			"error", err,
+			"subject", msg.Subject(),
+		)
+		if termErr := msg.Term(); termErr != nil {
+			c.logger.Error("failed to terminate poison message", "error", termErr)
+		}
+		return
 	}
 
 	c.mu.Lock()
-	c.batch = append(c.batch, &event)
+	c.batch = append(c.batch, trackedEvent{event: &event, msg: msg})
 	shouldFlush := len(c.batch) >= c.config.Batch.MaxEvents
 	c.mu.Unlock()
 
 	if shouldFlush {
 		if err := c.flush(ctx); err != nil {
-			return fmt.Errorf("failed to flush batch: %w", err)
+			c.logger.Error("failed to flush batch", "error", err)
 		}
 	}
-
-	return nil
 }
 
 // flushTimer periodically flushes the batch based on time interval.
@@ -180,10 +223,11 @@ func (c *Consumer) flushTimer(ctx context.Context) {
 }
 
 // flush writes the current batch to S3.
-// Errors from individual partitions are logged but do not stop the flush.
-//
-//nolint:unparam // Always returns nil by design; errors are logged per-partition.
+// For each partition, messages are ACKed only after a successful S3 write.
+// On write failure, messages are NAKed so NATS redelivers them.
 func (c *Consumer) flush(ctx context.Context) error {
+	flushStart := time.Now()
+
 	c.mu.Lock()
 	if len(c.batch) == 0 {
 		c.mu.Unlock()
@@ -191,30 +235,63 @@ func (c *Consumer) flush(ctx context.Context) error {
 	}
 
 	// Swap batch
-	events := c.batch
-	c.batch = make([]*pb.EventEnvelope, 0, c.config.Batch.MaxEvents)
+	tracked := c.batch
+	c.batch = make([]trackedEvent, 0, c.config.Batch.MaxEvents)
 	c.lastFlush = time.Now()
 	c.mu.Unlock()
 
-	c.logger.Info("flushing batch", "count", len(events))
+	batchSize := len(tracked)
+	c.logger.Info("flushing batch", "count", batchSize)
 
-	// Group events by app_id and time partition
-	partitions := c.groupByPartition(events)
+	// Record batch size metric
+	if c.metrics != nil {
+		c.metrics.NATSBatchSize.Record(ctx, int64(batchSize))
+	}
+
+	// Group events by partition
+	partitions := c.groupByPartition(tracked)
 
 	// Write each partition
-	for key, partitionEvents := range partitions {
-		if err := c.writePartition(ctx, key, partitionEvents); err != nil {
-			c.logger.Error("failed to write partition",
+	for key, partitionTracked := range partitions {
+		if err := c.writePartition(ctx, key, partitionTracked); err != nil {
+			c.logger.Error("failed to write partition, NAKing messages for redelivery",
 				"partition", key,
+				"events", len(partitionTracked),
 				"error", err,
 			)
-			// Continue with other partitions
+			// NAK all messages in the failed partition so NATS redelivers them
+			for _, t := range partitionTracked {
+				if nakErr := t.msg.Nak(); nakErr != nil {
+					c.logger.Error("failed to NAK message", "error", nakErr)
+				}
+			}
+			continue
+		}
+
+		// Partition written successfully: ACK all messages
+		for _, t := range partitionTracked {
+			if ackErr := t.msg.Ack(); ackErr != nil {
+				c.logger.Error("failed to ACK message after successful write", "error", ackErr)
+			}
+		}
+
+		// Record S3 write metric
+		if c.metrics != nil {
+			c.metrics.S3FilesWritten.Add(ctx, 1)
+			c.metrics.NATSMessagesProcessed.Add(ctx, int64(len(partitionTracked)))
 		}
 	}
 
+	// Record flush latency
+	if c.metrics != nil {
+		flushDuration := float64(time.Since(flushStart).Milliseconds())
+		c.metrics.NATSFlushLatency.Record(ctx, flushDuration)
+	}
+
 	c.logger.Info("batch flushed",
-		"count", len(events),
+		"count", batchSize,
 		"partitions", len(partitions),
+		"duration_ms", time.Since(flushStart).Milliseconds(),
 	)
 
 	return nil
@@ -229,32 +306,32 @@ type partitionKey struct {
 	Hour  int
 }
 
-// groupByPartition groups events by their partition key.
-func (c *Consumer) groupByPartition(events []*pb.EventEnvelope) map[partitionKey][]*pb.EventEnvelope {
-	partitions := make(map[partitionKey][]*pb.EventEnvelope)
+// groupByPartition groups tracked events by their partition key.
+func (c *Consumer) groupByPartition(tracked []trackedEvent) map[partitionKey][]trackedEvent {
+	partitions := make(map[partitionKey][]trackedEvent)
 
-	for _, event := range events {
-		t := time.UnixMilli(event.GetTimestampMs()).UTC()
+	for _, t := range tracked {
+		ts := time.UnixMilli(t.event.GetTimestampMs()).UTC()
 		key := partitionKey{
-			AppID: event.GetAppId(),
-			Year:  t.Year(),
-			Month: int(t.Month()),
-			Day:   t.Day(),
-			Hour:  t.Hour(),
+			AppID: t.event.GetAppId(),
+			Year:  ts.Year(),
+			Month: int(ts.Month()),
+			Day:   ts.Day(),
+			Hour:  ts.Hour(),
 		}
 
-		partitions[key] = append(partitions[key], event)
+		partitions[key] = append(partitions[key], t)
 	}
 
 	return partitions
 }
 
-// writePartition writes a partition of events to S3.
-func (c *Consumer) writePartition(ctx context.Context, key partitionKey, events []*pb.EventEnvelope) error {
-	// Convert to Parquet rows
-	rows := make([]EventRow, len(events))
-	for i, event := range events {
-		rows[i] = EventRowFromProto(event, key.Year, key.Month, key.Day, key.Hour)
+// writePartition writes a partition of tracked events to S3.
+func (c *Consumer) writePartition(ctx context.Context, key partitionKey, tracked []trackedEvent) error {
+	// Extract events from tracked for Parquet conversion
+	rows := make([]EventRow, len(tracked))
+	for i, t := range tracked {
+		rows[i] = EventRowFromProto(t.event, key.Year, key.Month, key.Day, key.Hour)
 	}
 
 	// Write to Parquet
@@ -269,31 +346,52 @@ func (c *Consumer) writePartition(ctx context.Context, key partitionKey, events 
 		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
+	// Record file size metric
+	if c.metrics != nil {
+		c.metrics.S3FileSize.Record(ctx, int64(len(data)))
+	}
+
 	c.logger.Debug("partition written",
 		"key", s3Key,
-		"events", len(events),
+		"events", len(tracked),
 		"size_bytes", len(data),
 	)
 
 	return nil
 }
 
-// Stop stops the consumer gracefully.
+// Stop stops the consumer gracefully. It signals workers to stop, waits for
+// them to finish (up to ShutdownTimeout), and performs a final flush of any
+// remaining messages in the batch.
 func (c *Consumer) Stop(ctx context.Context) error {
 	c.logger.Info("stopping warehouse consumer")
 	close(c.stopCh)
 
-	// Wait for consumer to stop or context to cancel
+	// Create a shutdown context with the configured timeout
+	shutdownTimeout := c.config.ShutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = 60 * time.Second
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, shutdownTimeout)
+	defer shutdownCancel()
+
+	// Wait for workers to stop or timeout
 	select {
 	case <-c.doneCh:
-	case <-ctx.Done():
-		return ctx.Err()
+		c.logger.Info("all workers stopped")
+	case <-shutdownCtx.Done():
+		c.logger.Warn("shutdown timeout waiting for workers, proceeding with final flush",
+			"timeout", shutdownTimeout,
+		)
 	}
 
-	// Final flush
-	if err := c.flush(ctx); err != nil {
-		c.logger.Error("failed final flush", "error", err)
+	// Final flush of any remaining messages
+	c.logger.Info("performing final flush")
+	if err := c.flush(shutdownCtx); err != nil {
+		c.logger.Error("failed final flush, messages may be redelivered by NATS", "error", err)
+		return fmt.Errorf("final flush failed: %w", err)
 	}
 
+	c.logger.Info("warehouse consumer stopped")
 	return nil
 }
