@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK (COMPLETE)
-- **Plan:** 01-10 complete, 10 of 10 plans done
+- **Plan:** 01-11 complete, 11 of 11 plans done (gap closure)
 - **Wave:** 5 of 5 (all waves complete)
-- **Status:** Phase complete
-- **Last activity:** 2026-02-05 — Completed 01-10-PLAN.md (Test Coverage)
+- **Status:** Phase complete with gap closure
+- **Last activity:** 2026-02-06 — Completed 01-11-PLAN.md (Test Coverage Gap Closure)
 
-Progress: [██████████] 10/10 Phase 1 plans
+Progress: [███████████] 11/11 Phase 1 plans (including gap closure)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -43,6 +43,9 @@ Progress: [██████████] 10/10 Phase 1 plans
 - Mock interfaces for test isolation (mockJetStreamMsg, mockKeyStore, mockDedupChecker)
 - Noop OTel meter for metrics testing without real collection
 - Table-driven tests for validation logic
+- EventPublisher interface for gateway service testability via dependency injection
+- testableConsumer wrapper for workerLoop testing without full JetStream mocking
+- Infrastructure-dependent code (S3, JetStream) requires integration tests for full coverage
 
 ## Completed
 - Project initialization
@@ -60,12 +63,13 @@ Progress: [██████████] 10/10 Phase 1 plans
 - **01-08**: Reaction engine observability (OTel/Prometheus metrics, DLQ advisory listener, worker pool, poison message Term())
 - **01-09**: Go SDK (Track/Flush/Close, UUID idempotency keys, batching, exponential backoff retry)
 - **01-10**: Test coverage (unit tests for auth, dedup, gateway, warehouse, compaction, SDK — 88-100% on business logic)
+- **01-11**: Test coverage gap closure (gateway service.go 97.2%, warehouse consumer workerLoop 90.9%, compaction pure logic 100%)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T21:51:52Z
-- **Stopped at:** Completed 01-10-PLAN.md (Test Coverage), Phase 1 complete
+- **Last session:** 2026-02-06T22:45:00Z
+- **Stopped at:** Completed 01-11-PLAN.md (Test Coverage Gap Closure), Phase 1 complete with gap closure
 - **Resume file:** None
 - **Next phase:** Phase 2 — gomobile SDK (iOS/Android)
