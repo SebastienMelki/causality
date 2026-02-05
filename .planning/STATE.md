@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK
-- **Plan:** 01-02 complete, 3 of 10 plans done
-- **Wave:** 1 of 5 (wave 1 plans: 01-01 done, 01-02 done, 01-03 in progress, 01-04 done)
+- **Plan:** 01-05 complete, 4 of 10 plans done
+- **Wave:** 2 of 5 (wave 2 plans: 01-05 done)
 - **Status:** In progress
-- **Last activity:** 2026-02-05 — Completed 01-02-PLAN.md (NATS Hardening)
+- **Last activity:** 2026-02-05 — Completed 01-05-PLAN.md (Dead Letter Queue)
 
-Progress: [███░░░░░░░] 3/10 Phase 1 plans
+Progress: [████░░░░░░] 4/10 Phase 1 plans
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -25,6 +25,10 @@ Progress: [███░░░░░░░] 3/10 Phase 1 plans
 - Poison messages use msg.Term() to prevent infinite redelivery
 - Metrics as nil-safe constructor parameter on warehouse consumer
 - Default WorkerCount=1 for backward compatibility
+- DLQ uses core NATS subscription (not JetStream) for advisory subjects
+- DLQ messages enriched with X-DLQ-* headers for traceability
+- DLQ stream 30-day retention vs 7-day main stream for investigation time
+- DLQ republish uses dlq.<original-subject> for subject-based routing
 
 ## Completed
 - Project initialization
@@ -35,12 +39,13 @@ Progress: [███░░░░░░░] 3/10 Phase 1 plans
 - **01-01**: Observability foundation (OTel + Prometheus metrics + HTTP middleware + idempotency_key proto)
 - **01-02**: NATS hardening (ACK-after-write consumer with trackedEvent, worker pool, graceful shutdown with timeout)
 - **01-04**: Dedup module (sliding window bloom filter with bits-and-blooms/bloom/v3, gateway + consumer adapters)
+- **01-05**: Dead letter queue (DLQ module with NATS advisory listener, CAUSALITY_DLQ stream, OTel depth metrics)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T18:36:33Z
-- **Stopped at:** Completed 01-02-PLAN.md
+- **Last session:** 2026-02-05T18:37:17Z
+- **Stopped at:** Completed 01-05-PLAN.md
 - **Resume file:** None
-- **Next plans:** 01-03 (Auth/Gateway), 01-05 (DLQ) — wave 1 remaining
+- **Next plans:** 01-03 (Auth/Gateway), 01-06 (Warehouse Parquet), 01-07 (Trino) — waves 1-3
