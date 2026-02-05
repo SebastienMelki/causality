@@ -10,8 +10,31 @@ import (
 	"time"
 
 	"github.com/SebastienMelki/causality/internal/nats"
+	"github.com/SebastienMelki/causality/internal/observability"
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
+
+// ServerOpts holds optional dependencies for the HTTP gateway server.
+type ServerOpts struct {
+	// AuthMiddleware is HTTP middleware that validates API keys. If nil,
+	// no authentication is enforced.
+	AuthMiddleware func(http.Handler) http.Handler
+
+	// MetricsHandler serves Prometheus metrics. If nil, no /metrics endpoint
+	// is registered.
+	MetricsHandler http.Handler
+
+	// Metrics provides OTel metric instruments for HTTP middleware.
+	// If nil, HTTP metrics are not recorded.
+	Metrics *observability.Metrics
+
+	// Dedup provides deduplication checking. If nil, dedup is disabled.
+	Dedup DedupChecker
+
+	// AdminRouteRegistrar registers admin API routes (e.g., key management)
+	// onto the mux. If nil, no admin routes are mounted.
+	AdminRouteRegistrar func(mux *http.ServeMux)
+}
 
 // Server is the HTTP gateway server.
 type Server struct {
@@ -22,15 +45,16 @@ type Server struct {
 	logger       *slog.Logger
 }
 
-// NewServer creates a new HTTP gateway server.
-// After buf generate, replace manual routing with sebuf-generated handlers:
-//   api.RegisterEventServiceServer(eventService, api.WithMux(mux))
-func NewServer(cfg Config, natsClient *nats.Client, publisher *nats.Publisher, logger *slog.Logger) (*Server, error) {
+// NewServer creates a new HTTP gateway server with the given options.
+func NewServer(cfg Config, natsClient *nats.Client, publisher *nats.Publisher, logger *slog.Logger, opts *ServerOpts) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if opts == nil {
+		opts = &ServerOpts{}
+	}
 
-	eventService := NewEventService(publisher, nil, 0, logger)
+	eventService := NewEventService(publisher, opts.Dedup, cfg.MaxBatchEvents, logger)
 
 	server := &Server{
 		config:       cfg,
@@ -50,15 +74,47 @@ func NewServer(cfg Config, natsClient *nats.Client, publisher *nats.Publisher, l
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("GET /ready", server.handleReady)
 
-	// Apply middleware
-	handler := Chain(mux,
+	// Prometheus metrics endpoint
+	if opts.MetricsHandler != nil {
+		mux.Handle("GET /metrics", opts.MetricsHandler)
+	}
+
+	// Admin routes (API key management)
+	if opts.AdminRouteRegistrar != nil {
+		opts.AdminRouteRegistrar(mux)
+	}
+
+	// Build middleware chain.
+	// Order (outermost first): RequestID -> Logging -> Recovery -> HTTPMetrics ->
+	// CORS -> BodySizeLimit -> Auth -> PerKeyRateLimit -> ContentType
+	middlewares := []Middleware{
 		RequestID,
 		Logging(server.logger),
 		Recovery(server.logger),
+	}
+
+	// OTel HTTP metrics (if available)
+	if opts.Metrics != nil {
+		middlewares = append(middlewares, observability.HTTPMetrics(opts.Metrics))
+	}
+
+	middlewares = append(middlewares,
 		CORS(server.config.CORS),
-		RateLimit(server.config.RateLimit),
-		ContentType,
+		BodySizeLimit(server.config.MaxBodySize),
 	)
+
+	// Auth middleware (if available)
+	if opts.AuthMiddleware != nil {
+		middlewares = append(middlewares, opts.AuthMiddleware)
+	}
+
+	// Per-key rate limiting (after auth, so app_id is in context)
+	middlewares = append(middlewares, PerKeyRateLimit(server.config.RateLimit))
+
+	// Content type
+	middlewares = append(middlewares, ContentType)
+
+	handler := Chain(mux, middlewares...)
 
 	server.httpServer = &http.Server{
 		Addr:           cfg.Addr,

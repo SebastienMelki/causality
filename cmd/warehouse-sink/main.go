@@ -11,6 +11,7 @@ import (
 
 	"github.com/caarlos0/env/v10"
 
+	"github.com/SebastienMelki/causality/internal/compaction"
 	"github.com/SebastienMelki/causality/internal/nats"
 	"github.com/SebastienMelki/causality/internal/observability"
 	"github.com/SebastienMelki/causality/internal/warehouse"
@@ -32,6 +33,9 @@ type Config struct {
 
 	// Warehouse configuration.
 	Warehouse warehouse.Config `envPrefix:""`
+
+	// Compaction configuration.
+	Compaction compaction.Config `envPrefix:""`
 
 	// ConsumerName is the NATS consumer name.
 	ConsumerName string `env:"CONSUMER_NAME" envDefault:"warehouse-sink"`
@@ -138,6 +142,18 @@ func run() error {
 		return err
 	}
 
+	// Create and start compaction module
+	compactionMod := compaction.New(
+		s3Client.RawClient(),
+		cfg.Warehouse.S3,
+		cfg.Compaction,
+		metrics,
+		logger,
+	)
+	if err := compactionMod.Start(ctx); err != nil {
+		return err
+	}
+
 	// Create and start consumer
 	consumer := warehouse.NewConsumer(
 		natsClient.JetStream(),
@@ -162,6 +178,9 @@ func run() error {
 	// Graceful shutdown
 	logger.Info("initiating graceful shutdown")
 	cancel()
+
+	// Stop compaction before consumer
+	compactionMod.Stop()
 
 	// Stop consumer with shutdown timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Warehouse.ShutdownTimeout)
