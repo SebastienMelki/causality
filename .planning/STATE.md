@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK
-- **Plan:** 01-05 complete, 4 of 10 plans done
-- **Wave:** 2 of 5 (wave 2 plans: 01-05 done)
+- **Plan:** 01-05 complete, 5 of 10 plans done
+- **Wave:** 2 of 5 (wave 1 complete, wave 2 plans: 01-05 done)
 - **Status:** In progress
-- **Last activity:** 2026-02-05 — Completed 01-05-PLAN.md (Dead Letter Queue)
+- **Last activity:** 2026-02-05 — Completed 01-03-PLAN.md (Auth Module)
 
-Progress: [████░░░░░░] 4/10 Phase 1 plans
+Progress: [█████░░░░░] 5/10 Phase 1 plans
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -29,6 +29,11 @@ Progress: [████░░░░░░] 4/10 Phase 1 plans
 - DLQ messages enriched with X-DLQ-* headers for traceability
 - DLQ stream 30-day retention vs 7-day main stream for investigation time
 - DLQ republish uses dlq.<original-subject> for subject-based routing
+- API key hashing: SHA256 (not bcrypt) for high-entropy 256-bit random keys — fast lookup, brute-force infeasible
+- Admin key endpoints unprotected until Phase 3 session auth + RBAC
+- Partial PostgreSQL index on key_hash WHERE NOT revoked for optimized active key lookup
+- Auth middleware skips /health, /ready, /metrics paths
+- Context-injected app_id via auth.GetAppID(ctx) for downstream handler use
 
 ## Completed
 - Project initialization
@@ -40,12 +45,13 @@ Progress: [████░░░░░░] 4/10 Phase 1 plans
 - **01-02**: NATS hardening (ACK-after-write consumer with trackedEvent, worker pool, graceful shutdown with timeout)
 - **01-04**: Dedup module (sliding window bloom filter with bits-and-blooms/bloom/v3, gateway + consumer adapters)
 - **01-05**: Dead letter queue (DLQ module with NATS advisory listener, CAUSALITY_DLQ stream, OTel depth metrics)
+- **01-03**: Auth module (API key generation with SHA256 hashing, X-API-Key middleware, admin CRUD endpoints)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T18:37:17Z
-- **Stopped at:** Completed 01-05-PLAN.md
+- **Last session:** 2026-02-05T18:37:35Z
+- **Stopped at:** Completed 01-03-PLAN.md
 - **Resume file:** None
-- **Next plans:** 01-03 (Auth/Gateway), 01-06 (Warehouse Parquet), 01-07 (Trino) — waves 1-3
+- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-08 (Go SDK) — waves 3-4
