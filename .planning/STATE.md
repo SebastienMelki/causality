@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK
-- **Plan:** 01-08 complete, 6 of 10 plans done
-- **Wave:** 3 of 5 (wave 3 in progress)
+- **Plan:** 01-09 complete, 7 of 10 plans done
+- **Wave:** 4 of 5 (wave 4 complete)
 - **Status:** In progress
-- **Last activity:** 2026-02-05 — Completed 01-08-PLAN.md (Reaction Engine Observability)
+- **Last activity:** 2026-02-05 — Completed 01-09-PLAN.md (Go SDK)
 
-Progress: [██████░░░░] 6/10 Phase 1 plans
+Progress: [███████░░░] 7/10 Phase 1 plans
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -37,6 +37,9 @@ Progress: [██████░░░░] 6/10 Phase 1 plans
 - Reaction engine metrics on port 9091 (warehouse sink uses 9090)
 - Reaction engine shutdown timeout 30s default (no batch flush, unlike warehouse's 60s)
 - Reaction engine per-message ACK (not deferred batch ACK like warehouse)
+- Go SDK JSON over HTTP (not protobuf) for simplicity and minimal dependencies
+- Go SDK full jitter exponential backoff: random delay between 0 and exponential delay
+- Go SDK ServerContext collected once at client creation, reused for all events
 
 ## Completed
 - Project initialization
@@ -50,12 +53,13 @@ Progress: [██████░░░░] 6/10 Phase 1 plans
 - **01-05**: Dead letter queue (DLQ module with NATS advisory listener, CAUSALITY_DLQ stream, OTel depth metrics)
 - **01-03**: Auth module (API key generation with SHA256 hashing, X-API-Key middleware, admin CRUD endpoints)
 - **01-08**: Reaction engine observability (OTel/Prometheus metrics, DLQ advisory listener, worker pool, poison message Term())
+- **01-09**: Go SDK (Track/Flush/Close, UUID idempotency keys, batching, exponential backoff retry)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T18:45:37Z
-- **Stopped at:** Completed 01-08-PLAN.md
+- **Last session:** 2026-02-05T21:16:09Z
+- **Stopped at:** Completed 01-09-PLAN.md
 - **Resume file:** None
-- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-09 (Go SDK), 01-10 (Integration) — waves 3-5
+- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-10 (Integration) — waves 3-5
