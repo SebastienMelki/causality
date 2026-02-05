@@ -20,6 +20,23 @@ type Config struct {
 
 	// Anomaly detection configuration
 	Anomaly AnomalyConfig `envPrefix:"ANOMALY_"`
+
+	// Consumer configuration
+	Consumer ConsumerConfig `envPrefix:"CONSUMER_"`
+
+	// ShutdownTimeout is the maximum time to wait for graceful shutdown.
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"30s"`
+}
+
+// ConsumerConfig holds reaction consumer settings.
+type ConsumerConfig struct {
+	// WorkerCount is the number of goroutines that fetch and process messages
+	// from NATS in parallel.
+	WorkerCount int `env:"WORKER_COUNT" envDefault:"1"`
+
+	// FetchBatchSize is the number of messages to fetch per pull request
+	// from the NATS consumer.
+	FetchBatchSize int `env:"FETCH_BATCH_SIZE" envDefault:"100"`
 }
 
 // EngineConfig holds rule engine settings.
