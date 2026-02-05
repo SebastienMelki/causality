@@ -6,6 +6,7 @@ package causalityv1
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -146,6 +147,11 @@ func bindDataFromJSONRequest[Req any](r *http.Request, toBind *Req) error {
 
 	if len(bodyBytes) == 0 {
 		return nil
+	}
+
+	// Check for custom JSON unmarshaler (unwrap support)
+	if unmarshaler, ok := any(toBind).(json.Unmarshaler); ok {
+		return unmarshaler.UnmarshalJSON(bodyBytes)
 	}
 
 	protoRequest, ok := any(toBind).(proto.Message)
@@ -344,6 +350,12 @@ func genericHandler[Req any, Res any](serve func(context.Context, Req) (Res, err
 
 		response, err := serve(r.Context(), request)
 		if err != nil {
+			// Check if error is already a proto.Message (e.g., custom proto error types)
+			// If so, pass it directly - defaultErrorResponse will preserve its structure
+			if _, ok := err.(proto.Message); ok {
+				writeErrorWithHandler(w, r, err, errorHandler)
+				return
+			}
 			errorMsg := &sebufhttp.Error{
 				Message: err.Error(),
 			}
@@ -384,6 +396,10 @@ func marshalResponse(r *http.Request, response any) ([]byte, error) {
 
 	switch filterFlags(contentType) {
 	case JSONContentType:
+		// Check for custom JSON marshaler (unwrap support)
+		if marshaler, ok := response.(json.Marshaler); ok {
+			return marshaler.MarshalJSON()
+		}
 		return protojson.Marshal(msg)
 	case BinaryContentType, ProtoContentType:
 		return proto.Marshal(msg)
@@ -503,6 +519,10 @@ func defaultErrorResponse(err error) proto.Message {
 	var handlerErr *sebufhttp.Error
 	if errors.As(err, &handlerErr) {
 		return handlerErr
+	}
+	// Check if error is already a proto.Message (e.g., custom proto error types)
+	if protoErr, ok := err.(proto.Message); ok {
+		return protoErr
 	}
 	return &sebufhttp.Error{Message: err.Error()}
 }

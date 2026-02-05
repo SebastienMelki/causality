@@ -415,6 +415,8 @@ type EventEnvelope struct {
 	CorrelationId string `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
 	// Device context with platform information
 	DeviceContext *DeviceContext `protobuf:"bytes,6,opt,name=device_context,json=deviceContext,proto3" json:"device_context,omitempty"`
+	// SDK-generated idempotency key (UUID). Used for server-side deduplication.
+	IdempotencyKey string `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Type-safe event payload using oneof
 	//
 	// Types that are valid to be assigned to Payload:
@@ -523,6 +525,13 @@ func (x *EventEnvelope) GetDeviceContext() *DeviceContext {
 		return x.DeviceContext
 	}
 	return nil
+}
+
+func (x *EventEnvelope) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
 }
 
 func (x *EventEnvelope) GetPayload() isEventEnvelope_Payload {
@@ -3167,14 +3176,15 @@ var File_causality_v1_events_proto protoreflect.FileDescriptor
 
 const file_causality_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x19causality/v1/events.proto\x12\fcausality.v1\x1a\x1bbuf/validate/validate.proto\"\x94\x11\n" +
+	"\x19causality/v1/events.proto\x12\fcausality.v1\x1a\x1bbuf/validate/validate.proto\"\xbd\x11\n" +
 	"\rEventEnvelope\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1e\n" +
 	"\x06app_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05appId\x12$\n" +
 	"\tdevice_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bdeviceId\x12!\n" +
 	"\ftimestamp_ms\x18\x04 \x01(\x03R\vtimestampMs\x12%\n" +
 	"\x0ecorrelation_id\x18\x05 \x01(\tR\rcorrelationId\x12B\n" +
-	"\x0edevice_context\x18\x06 \x01(\v2\x1b.causality.v1.DeviceContextR\rdeviceContext\x128\n" +
+	"\x0edevice_context\x18\x06 \x01(\v2\x1b.causality.v1.DeviceContextR\rdeviceContext\x12'\n" +
+	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x128\n" +
 	"\n" +
 	"user_login\x18\n" +
 	" \x01(\v2\x17.causality.v1.UserLoginH\x00R\tuserLogin\x12;\n" +
