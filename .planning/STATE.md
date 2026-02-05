@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK
-- **Plan:** 01-09 complete, 7 of 10 plans done
-- **Wave:** 4 of 5 (wave 4 complete)
+- **Plan:** 01-09 complete, 9 of 10 plans done
+- **Wave:** 4 of 5 (waves 1-4 complete)
 - **Status:** In progress
 - **Last activity:** 2026-02-05 — Completed 01-09-PLAN.md (Go SDK)
 
-Progress: [███████░░░] 7/10 Phase 1 plans
+Progress: [█████████░] 9/10 Phase 1 plans
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -52,6 +52,8 @@ Progress: [███████░░░] 7/10 Phase 1 plans
 - **01-04**: Dedup module (sliding window bloom filter with bits-and-blooms/bloom/v3, gateway + consumer adapters)
 - **01-05**: Dead letter queue (DLQ module with NATS advisory listener, CAUSALITY_DLQ stream, OTel depth metrics)
 - **01-03**: Auth module (API key generation with SHA256 hashing, X-API-Key middleware, admin CRUD endpoints)
+- **01-06**: Gateway integration (auth middleware, per-key rate limiting, body size limits, dedup, validation, admin routes)
+- **01-07**: Parquet compaction (merge small files to 128MB, cold partition filtering, hourly scheduler)
 - **01-08**: Reaction engine observability (OTel/Prometheus metrics, DLQ advisory listener, worker pool, poison message Term())
 - **01-09**: Go SDK (Track/Flush/Close, UUID idempotency keys, batching, exponential backoff retry)
 
@@ -59,7 +61,7 @@ Progress: [███████░░░] 7/10 Phase 1 plans
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T21:16:09Z
-- **Stopped at:** Completed 01-09-PLAN.md
+- **Last session:** 2026-02-05T21:20:00Z
+- **Stopped at:** Completed 01-09-PLAN.md, 01-06 and 01-07 summaries created
 - **Resume file:** None
-- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-10 (Integration) — waves 3-5
+- **Next plans:** 01-10 (Test Coverage ≥70%) — wave 5
