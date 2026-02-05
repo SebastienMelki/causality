@@ -30,7 +30,7 @@ func NewServer(cfg Config, natsClient *nats.Client, publisher *nats.Publisher, l
 		logger = slog.Default()
 	}
 
-	eventService := NewEventService(publisher, logger)
+	eventService := NewEventService(publisher, nil, 0, logger)
 
 	server := &Server{
 		config:       cfg,
