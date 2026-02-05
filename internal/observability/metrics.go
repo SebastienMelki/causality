@@ -29,6 +29,12 @@ type Metrics struct {
 	// Dead-letter queue metrics
 	DLQDepth otelmetric.Int64UpDownCounter
 
+	// Compaction metrics
+	CompactionRuns              otelmetric.Int64Counter
+	CompactionFilesCompacted    otelmetric.Int64Counter
+	CompactionPartitionsSkipped otelmetric.Int64Counter
+	CompactionDuration          otelmetric.Float64Histogram
+
 	// Reaction engine metrics
 	RulesEvaluated otelmetric.Int64Counter
 	AlertsFired    otelmetric.Int64Counter
@@ -135,6 +141,40 @@ func NewMetrics(meter otelmetric.Meter) (*Metrics, error) {
 	m.DLQDepth, err = meter.Int64UpDownCounter(
 		"dlq.depth",
 		otelmetric.WithDescription("Dead-letter queue message depth"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compaction metrics
+	m.CompactionRuns, err = meter.Int64Counter(
+		"compaction.runs",
+		otelmetric.WithDescription("Total compaction runs executed"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	m.CompactionFilesCompacted, err = meter.Int64Counter(
+		"compaction.files.compacted",
+		otelmetric.WithDescription("Total files merged during compaction"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	m.CompactionPartitionsSkipped, err = meter.Int64Counter(
+		"compaction.partitions.skipped",
+		otelmetric.WithDescription("Partitions skipped during compaction (no small files)"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	m.CompactionDuration, err = meter.Float64Histogram(
+		"compaction.duration",
+		otelmetric.WithUnit("ms"),
+		otelmetric.WithDescription("Compaction run duration in milliseconds"),
 	)
 	if err != nil {
 		return nil, err
