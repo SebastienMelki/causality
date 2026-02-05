@@ -20,10 +20,16 @@ type DedupChecker interface {
 	IsDuplicate(key string) bool
 }
 
+// EventPublisher abstracts the NATS publisher for testing.
+type EventPublisher interface {
+	// PublishEvent publishes an event to the message queue.
+	PublishEvent(ctx context.Context, event *pb.EventEnvelope) error
+}
+
 // EventService implements the event ingestion business logic.
 // This service is used by HTTP handlers (sebuf-generated or manual).
 type EventService struct {
-	publisher      *nats.Publisher
+	publisher      EventPublisher
 	dedup          DedupChecker
 	maxBatchEvents int
 	logger         *slog.Logger
@@ -33,6 +39,13 @@ type EventService struct {
 // pass nil to disable deduplication. The maxBatchEvents parameter controls the
 // maximum number of events in a batch (0 means no limit).
 func NewEventService(publisher *nats.Publisher, dedup DedupChecker, maxBatchEvents int, logger *slog.Logger) *EventService {
+	return NewEventServiceWithPublisher(publisher, dedup, maxBatchEvents, logger)
+}
+
+// NewEventServiceWithPublisher creates a new event service with a custom publisher.
+// This allows dependency injection for testing. The publisher parameter can be any
+// implementation of EventPublisher (including *nats.Publisher).
+func NewEventServiceWithPublisher(publisher EventPublisher, dedup DedupChecker, maxBatchEvents int, logger *slog.Logger) *EventService {
 	if logger == nil {
 		logger = slog.Default()
 	}

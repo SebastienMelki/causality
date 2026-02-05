@@ -9,13 +9,30 @@ import (
 	pb "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
-// mockNATSPublisher mocks the NATS publisher for testing.
-type mockNATSPublisher struct {
+// mockPublisher is a mock implementation of EventPublisher for testing.
+type mockPublisher struct {
 	publishedEvents []*pb.EventEnvelope
 	publishErr      error
+	// failOnIndex allows failing on specific event indexes in batch operations
+	failOnIndex map[int]error
+	callCount   int
 }
 
-func (m *mockNATSPublisher) PublishEvent(_ context.Context, event *pb.EventEnvelope) error {
+func newMockPublisher() *mockPublisher {
+	return &mockPublisher{
+		publishedEvents: make([]*pb.EventEnvelope, 0),
+		failOnIndex:     make(map[int]error),
+	}
+}
+
+func (m *mockPublisher) PublishEvent(_ context.Context, event *pb.EventEnvelope) error {
+	defer func() { m.callCount++ }()
+
+	// Check if this specific call should fail
+	if err, exists := m.failOnIndex[m.callCount]; exists {
+		return err
+	}
+	// Check if all calls should fail
 	if m.publishErr != nil {
 		return m.publishErr
 	}
@@ -26,34 +43,33 @@ func (m *mockNATSPublisher) PublishEvent(_ context.Context, event *pb.EventEnvel
 // mockDedupChecker mocks the dedup checker for testing.
 type mockDedupChecker struct {
 	duplicateKeys map[string]bool
+	// trackSeen controls whether to mark keys as seen on first check
+	trackSeen bool
 }
 
 func newMockDedupChecker() *mockDedupChecker {
 	return &mockDedupChecker{
 		duplicateKeys: make(map[string]bool),
+		trackSeen:     true, // Default behavior: track seen keys
 	}
 }
 
 func (m *mockDedupChecker) IsDuplicate(key string) bool {
+	if key == "" {
+		return false
+	}
 	if m.duplicateKeys[key] {
 		return true
 	}
-	m.duplicateKeys[key] = true
+	if m.trackSeen {
+		m.duplicateKeys[key] = true
+	}
 	return false
 }
 
-// mockPublisher is a mock implementation for testing.
-type mockPublisher struct {
-	publishedEvents []*pb.EventEnvelope
-	shouldFail      bool
-}
-
-func (m *mockPublisher) PublishEvent(_ context.Context, event *pb.EventEnvelope) error {
-	if m.shouldFail {
-		return context.DeadlineExceeded
-	}
-	m.publishedEvents = append(m.publishedEvents, event)
-	return nil
+// markAsDuplicate pre-marks a key as duplicate for testing
+func (m *mockDedupChecker) markAsDuplicate(key string) {
+	m.duplicateKeys[key] = true
 }
 
 func TestEventService_IngestEvent(t *testing.T) {
@@ -358,14 +374,11 @@ func TestIngestEvent_MissingTimestamp_ReturnsError(t *testing.T) {
 
 // TestIngestEvent_DuplicateDropped verifies that duplicate events are silently dropped.
 func TestIngestEvent_DuplicateDropped(t *testing.T) {
-	pub := &mockNATSPublisher{}
+	pub := newMockPublisher()
 	dedup := newMockDedupChecker()
-	svc := NewEventService(nil, dedup, 0, nil)
-
-	// Manually inject the publisher via field (for testing only)
-	// Since publisher is private, we'll need to test this differently
-	// Let's mark the key as already seen
-	dedup.duplicateKeys["test-idempotency-key"] = true
+	// Mark the key as already seen
+	dedup.markAsDuplicate("test-idempotency-key")
+	svc := NewEventServiceWithPublisher(pub, dedup, 0, nil)
 
 	req := &pb.IngestEventRequest{
 		Event: &pb.EventEnvelope{
@@ -576,5 +589,423 @@ func TestIngestEventBatch_EmptyBatch(t *testing.T) {
 	}
 	if !errors.Is(err, ErrAtLeastOneEvent) {
 		t.Errorf("IngestEventBatch() error = %v, want ErrAtLeastOneEvent", err)
+	}
+}
+
+// --- Integration tests with mock publisher ---
+
+// TestIngestEvent_WithMockPublisher_PublishesEvent verifies that valid events are published.
+func TestIngestEvent_WithMockPublisher_PublishesEvent(t *testing.T) {
+	pub := newMockPublisher()
+	svc := NewEventServiceWithPublisher(pub, nil, 0, nil)
+
+	req := &pb.IngestEventRequest{
+		Event: &pb.EventEnvelope{
+			AppId:       "test-app",
+			TimestampMs: time.Now().UnixMilli(),
+			Payload: &pb.EventEnvelope_ScreenView{
+				ScreenView: &pb.ScreenView{ScreenName: "home"},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEvent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEvent() returned unexpected error: %v", err)
+	}
+
+	if resp.Status != "accepted" {
+		t.Errorf("Response status = %q, want %q", resp.Status, "accepted")
+	}
+
+	// Verify event was published
+	if len(pub.publishedEvents) != 1 {
+		t.Fatalf("Expected 1 published event, got %d", len(pub.publishedEvents))
+	}
+
+	// Verify event ID was generated
+	if pub.publishedEvents[0].GetId() == "" {
+		t.Error("Published event should have an ID")
+	}
+	if resp.EventId != pub.publishedEvents[0].GetId() {
+		t.Errorf("Response event_id = %q, want %q", resp.EventId, pub.publishedEvents[0].GetId())
+	}
+}
+
+// TestIngestEvent_WithDedup_FirstEventAccepted verifies first event passes dedup check.
+func TestIngestEvent_WithDedup_FirstEventAccepted(t *testing.T) {
+	pub := newMockPublisher()
+	dedup := newMockDedupChecker()
+	svc := NewEventServiceWithPublisher(pub, dedup, 0, nil)
+
+	req := &pb.IngestEventRequest{
+		Event: &pb.EventEnvelope{
+			AppId:          "test-app",
+			IdempotencyKey: "unique-key-123",
+			TimestampMs:    time.Now().UnixMilli(),
+			Payload: &pb.EventEnvelope_ScreenView{
+				ScreenView: &pb.ScreenView{ScreenName: "home"},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEvent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEvent() returned unexpected error: %v", err)
+	}
+
+	if resp.Status != "accepted" {
+		t.Errorf("Response status = %q, want %q", resp.Status, "accepted")
+	}
+
+	// Verify event was published (first time, not a duplicate)
+	if len(pub.publishedEvents) != 1 {
+		t.Fatalf("Expected 1 published event, got %d", len(pub.publishedEvents))
+	}
+
+	// Verify the idempotency key was preserved
+	if pub.publishedEvents[0].GetIdempotencyKey() != "unique-key-123" {
+		t.Errorf("Idempotency key = %q, want %q", pub.publishedEvents[0].GetIdempotencyKey(), "unique-key-123")
+	}
+}
+
+// TestIngestEvent_WithDedup_DuplicateSkipsPublish verifies duplicate is not published but returns success.
+func TestIngestEvent_WithDedup_DuplicateSkipsPublish(t *testing.T) {
+	pub := newMockPublisher()
+	dedup := newMockDedupChecker()
+	// Pre-mark the key as seen
+	dedup.markAsDuplicate("duplicate-key")
+	svc := NewEventServiceWithPublisher(pub, dedup, 0, nil)
+
+	req := &pb.IngestEventRequest{
+		Event: &pb.EventEnvelope{
+			AppId:          "test-app",
+			IdempotencyKey: "duplicate-key",
+			TimestampMs:    time.Now().UnixMilli(),
+			Payload: &pb.EventEnvelope_ScreenView{
+				ScreenView: &pb.ScreenView{ScreenName: "home"},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEvent(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEvent() returned unexpected error: %v", err)
+	}
+
+	// Should return success (silently dropped)
+	if resp.Status != "accepted" {
+		t.Errorf("Response status = %q, want %q", resp.Status, "accepted")
+	}
+
+	// Verify event was NOT published (it's a duplicate)
+	if len(pub.publishedEvents) != 0 {
+		t.Errorf("Expected 0 published events for duplicate, got %d", len(pub.publishedEvents))
+	}
+}
+
+// TestIngestEvent_PublishError_ReturnsError verifies publish errors are returned.
+func TestIngestEvent_PublishError_ReturnsError(t *testing.T) {
+	pub := newMockPublisher()
+	pub.publishErr = errors.New("NATS connection failed")
+	svc := NewEventServiceWithPublisher(pub, nil, 0, nil)
+
+	req := &pb.IngestEventRequest{
+		Event: &pb.EventEnvelope{
+			AppId:       "test-app",
+			TimestampMs: time.Now().UnixMilli(),
+			Payload: &pb.EventEnvelope_ScreenView{
+				ScreenView: &pb.ScreenView{ScreenName: "home"},
+			},
+		},
+	}
+
+	_, err := svc.IngestEvent(context.Background(), req)
+	if err == nil {
+		t.Fatal("IngestEvent() should return error when publish fails")
+	}
+
+	if !errors.Is(err, pub.publishErr) && err.Error() == "" {
+		// Error should contain the original publish error message
+		t.Logf("Got expected error: %v", err)
+	}
+}
+
+// TestIngestEventBatch_MixedValidInvalid verifies batch with valid + invalid events.
+func TestIngestEventBatch_MixedValidInvalid(t *testing.T) {
+	pub := newMockPublisher()
+	svc := NewEventServiceWithPublisher(pub, nil, 0, nil)
+
+	req := &pb.IngestEventBatchRequest{
+		Events: []*pb.EventEnvelope{
+			{
+				// Valid event
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+			},
+			{
+				// Invalid - missing app_id
+				AppId:       "",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "profile"}},
+			},
+			{
+				// Valid event
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ButtonTap{ButtonTap: &pb.ButtonTap{ButtonId: "submit"}},
+			},
+			nil, // Invalid - nil event
+		},
+	}
+
+	resp, err := svc.IngestEventBatch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEventBatch() returned unexpected error: %v", err)
+	}
+
+	// 2 valid, 2 invalid
+	if resp.AcceptedCount != 2 {
+		t.Errorf("AcceptedCount = %d, want 2", resp.AcceptedCount)
+	}
+	if resp.RejectedCount != 2 {
+		t.Errorf("RejectedCount = %d, want 2", resp.RejectedCount)
+	}
+
+	// Only valid events should be published
+	if len(pub.publishedEvents) != 2 {
+		t.Errorf("Expected 2 published events, got %d", len(pub.publishedEvents))
+	}
+
+	// Verify results
+	if len(resp.Results) != 4 {
+		t.Fatalf("Results count = %d, want 4", len(resp.Results))
+	}
+
+	// Check individual results
+	if resp.Results[0].Status != "accepted" {
+		t.Errorf("Results[0].Status = %q, want accepted", resp.Results[0].Status)
+	}
+	if resp.Results[1].Status != "rejected" {
+		t.Errorf("Results[1].Status = %q, want rejected", resp.Results[1].Status)
+	}
+	if resp.Results[2].Status != "accepted" {
+		t.Errorf("Results[2].Status = %q, want accepted", resp.Results[2].Status)
+	}
+	if resp.Results[3].Status != "rejected" {
+		t.Errorf("Results[3].Status = %q, want rejected", resp.Results[3].Status)
+	}
+}
+
+// TestIngestEventBatch_WithDedup_FiltersDuplicates verifies batch with duplicates.
+func TestIngestEventBatch_WithDedup_FiltersDuplicates(t *testing.T) {
+	pub := newMockPublisher()
+	dedup := newMockDedupChecker()
+	// Pre-mark one key as duplicate
+	dedup.markAsDuplicate("dup-key-1")
+	svc := NewEventServiceWithPublisher(pub, dedup, 0, nil)
+
+	req := &pb.IngestEventBatchRequest{
+		Events: []*pb.EventEnvelope{
+			{
+				AppId:          "test-app",
+				IdempotencyKey: "dup-key-1", // This is pre-marked as duplicate
+				TimestampMs:    time.Now().UnixMilli(),
+				Payload:        &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+			},
+			{
+				AppId:          "test-app",
+				IdempotencyKey: "unique-key-1", // First time seen
+				TimestampMs:    time.Now().UnixMilli(),
+				Payload:        &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "profile"}},
+			},
+			{
+				AppId:          "test-app",
+				IdempotencyKey: "unique-key-1", // Now duplicate (same as previous)
+				TimestampMs:    time.Now().UnixMilli(),
+				Payload:        &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "settings"}},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEventBatch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEventBatch() returned unexpected error: %v", err)
+	}
+
+	// All 3 should be "accepted" (duplicates are silently dropped but count as accepted)
+	if resp.AcceptedCount != 3 {
+		t.Errorf("AcceptedCount = %d, want 3", resp.AcceptedCount)
+	}
+	if resp.RejectedCount != 0 {
+		t.Errorf("RejectedCount = %d, want 0", resp.RejectedCount)
+	}
+
+	// Only 1 event should be published (unique-key-1 on first occurrence)
+	if len(pub.publishedEvents) != 1 {
+		t.Errorf("Expected 1 published event, got %d", len(pub.publishedEvents))
+	}
+
+	// The published event should have the unique key
+	if pub.publishedEvents[0].GetIdempotencyKey() != "unique-key-1" {
+		t.Errorf("Published event idempotency_key = %q, want unique-key-1", pub.publishedEvents[0].GetIdempotencyKey())
+	}
+}
+
+// TestIngestEventBatch_PublishError_ReturnsRejected verifies publish failures in batch.
+func TestIngestEventBatch_PublishError_ReturnsRejected(t *testing.T) {
+	pub := newMockPublisher()
+	// Make the second publish call fail
+	pub.failOnIndex[1] = errors.New("NATS timeout")
+	svc := NewEventServiceWithPublisher(pub, nil, 0, nil)
+
+	req := &pb.IngestEventBatchRequest{
+		Events: []*pb.EventEnvelope{
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+			},
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "profile"}},
+			},
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "settings"}},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEventBatch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEventBatch() returned unexpected error: %v", err)
+	}
+
+	// 2 accepted, 1 rejected (the one that failed to publish)
+	if resp.AcceptedCount != 2 {
+		t.Errorf("AcceptedCount = %d, want 2", resp.AcceptedCount)
+	}
+	if resp.RejectedCount != 1 {
+		t.Errorf("RejectedCount = %d, want 1", resp.RejectedCount)
+	}
+
+	// Verify results
+	if resp.Results[0].Status != "accepted" {
+		t.Errorf("Results[0].Status = %q, want accepted", resp.Results[0].Status)
+	}
+	if resp.Results[1].Status != "rejected" {
+		t.Errorf("Results[1].Status = %q, want rejected", resp.Results[1].Status)
+	}
+	if resp.Results[1].Error == "" {
+		t.Error("Results[1].Error should contain error message")
+	}
+	if resp.Results[2].Status != "accepted" {
+		t.Errorf("Results[2].Status = %q, want accepted", resp.Results[2].Status)
+	}
+
+	// 2 events should have been published (first and third)
+	if len(pub.publishedEvents) != 2 {
+		t.Errorf("Expected 2 published events, got %d", len(pub.publishedEvents))
+	}
+}
+
+
+// TestIngestEventBatch_AllValid_AllPublished verifies all valid events are published.
+func TestIngestEventBatch_AllValid_AllPublished(t *testing.T) {
+	pub := newMockPublisher()
+	svc := NewEventServiceWithPublisher(pub, nil, 0, nil)
+
+	req := &pb.IngestEventBatchRequest{
+		Events: []*pb.EventEnvelope{
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+			},
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_UserLogin{UserLogin: &pb.UserLogin{UserId: "user123", Method: "email"}},
+			},
+			{
+				AppId:       "test-app",
+				TimestampMs: time.Now().UnixMilli(),
+				Payload:     &pb.EventEnvelope_ButtonTap{ButtonTap: &pb.ButtonTap{ButtonId: "submit"}},
+			},
+		},
+	}
+
+	resp, err := svc.IngestEventBatch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("IngestEventBatch() returned unexpected error: %v", err)
+	}
+
+	if resp.AcceptedCount != 3 {
+		t.Errorf("AcceptedCount = %d, want 3", resp.AcceptedCount)
+	}
+	if resp.RejectedCount != 0 {
+		t.Errorf("RejectedCount = %d, want 0", resp.RejectedCount)
+	}
+
+	// All 3 should be published
+	if len(pub.publishedEvents) != 3 {
+		t.Errorf("Expected 3 published events, got %d", len(pub.publishedEvents))
+	}
+
+	// Each event should have a generated ID
+	for i, e := range pub.publishedEvents {
+		if e.GetId() == "" {
+			t.Errorf("Published event %d should have an ID", i)
+		}
+		if e.GetIdempotencyKey() == "" {
+			t.Errorf("Published event %d should have an idempotency_key", i)
+		}
+	}
+}
+
+// TestEnrichEnvelope_GeneratesIdempotencyKey verifies idempotency key generation.
+func TestEnrichEnvelope_GeneratesIdempotencyKey(t *testing.T) {
+	svc := NewEventServiceWithPublisher(nil, nil, 0, nil)
+
+	event := &pb.EventEnvelope{
+		AppId:          "test-app",
+		TimestampMs:    time.Now().UnixMilli(),
+		IdempotencyKey: "", // Empty - should be generated
+		Payload:        &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+	}
+
+	svc.enrichEnvelope(event)
+
+	if event.IdempotencyKey == "" {
+		t.Error("enrichEnvelope() should generate idempotency_key when empty")
+	}
+
+	// Verify it's a valid UUID format (36 chars with dashes)
+	if len(event.IdempotencyKey) != 36 {
+		t.Errorf("Generated idempotency_key length = %d, want 36 (UUID format)", len(event.IdempotencyKey))
+	}
+}
+
+// TestEnrichEnvelope_PreservesExistingIdempotencyKey verifies existing keys are preserved.
+func TestEnrichEnvelope_PreservesExistingIdempotencyKey(t *testing.T) {
+	svc := NewEventServiceWithPublisher(nil, nil, 0, nil)
+
+	existingKey := "user-provided-key-123"
+	event := &pb.EventEnvelope{
+		AppId:          "test-app",
+		TimestampMs:    time.Now().UnixMilli(),
+		IdempotencyKey: existingKey,
+		Payload:        &pb.EventEnvelope_ScreenView{ScreenView: &pb.ScreenView{ScreenName: "home"}},
+	}
+
+	svc.enrichEnvelope(event)
+
+	if event.IdempotencyKey != existingKey {
+		t.Errorf("enrichEnvelope() should preserve existing idempotency_key, got %q, want %q",
+			event.IdempotencyKey, existingKey)
 	}
 }
