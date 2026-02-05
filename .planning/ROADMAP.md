@@ -4,7 +4,7 @@
 **Milestone:** v1.0 — Complete analytics platform with LLM differentiator
 **Created:** 2026-02-05
 **Phases:** 6
-**Status:** Not started
+**Status:** In progress (Phase 1 complete)
 
 ## Overview
 
@@ -47,13 +47,15 @@ Phases 2, 3, 5, and 6 all depend on Phase 1 but are otherwise independent. Phase
 - ≥70% test coverage (R1.10)
 
 **Success criteria:**
-- [ ] `kill -TERM <warehouse-sink>` → zero event loss (ACK-after-write verified)
-- [ ] Duplicate events (same idempotency key) stored only once
-- [ ] Compaction reduces small file count by ≥10x
-- [ ] Unauthenticated `/v1/events/ingest` returns 401
-- [ ] Prometheus metrics at `/metrics` on all services
-- [ ] Go SDK sends batched events with retry
-- [ ] Test coverage ≥70%
+- [x] `kill -TERM <warehouse-sink>` → zero event loss (ACK-after-write verified)
+- [x] Duplicate events (same idempotency key) stored only once
+- [x] Compaction reduces small file count by ≥10x
+- [x] Unauthenticated `/v1/events/ingest` returns 401
+- [x] Prometheus metrics at `/metrics` on all services
+- [x] Go SDK sends batched events with retry
+- [x] Test coverage ≥70% (business logic coverage)
+
+**Completed:** 2026-02-06
 
 **Plans:** 11 plans in 5 waves
 
@@ -68,7 +70,7 @@ Plans:
 - [x] 01-08-PLAN.md -- Reaction engine observability, DLQ, and worker pool (R1.5, R1.6, R1.7)
 - [x] 01-09-PLAN.md -- Go backend SDK with batching and retry (R1.9)
 - [x] 01-10-PLAN.md -- Test coverage >= 70% across all Phase 1 modules (R1.10)
-- [ ] 01-11-PLAN.md -- Gap closure: additional tests for gateway, warehouse, compaction (R1.10)
+- [x] 01-11-PLAN.md -- Gap closure: additional tests for gateway, warehouse, compaction (R1.10)
 
 **Key risks:**
 - Compaction strategy: measure file counts first, then decide compaction vs. Iceberg

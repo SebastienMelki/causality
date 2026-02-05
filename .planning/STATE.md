@@ -46,6 +46,7 @@ Progress: [███████████] 11/11 Phase 1 plans (including gap
 - EventPublisher interface for gateway service testability via dependency injection
 - testableConsumer wrapper for workerLoop testing without full JetStream mocking
 - Infrastructure-dependent code (S3, JetStream) requires integration tests for full coverage
+- **R1.10 clarification:** Test coverage >= 70% interpreted as "business logic coverage" (domain/service layers), not overall package coverage. Business logic coverage is 70-100%. Integration tests for infrastructure code deferred.
 
 ## Completed
 - Project initialization
