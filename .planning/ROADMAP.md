@@ -55,19 +55,20 @@ Phases 2, 3, 5, and 6 all depend on Phase 1 but are otherwise independent. Phase
 - [ ] Go SDK sends batched events with retry
 - [ ] Test coverage ≥70%
 
-**Plans:** 10 plans in 5 waves
+**Plans:** 11 plans in 5 waves
 
 Plans:
-- [ ] 01-01-PLAN.md -- Observability foundation (OTel + Prometheus) and proto idempotency_key field
-- [ ] 01-02-PLAN.md -- ACK-after-write consumer refactor with worker pool (R1.1, R1.6)
-- [ ] 01-03-PLAN.md -- Auth module: API key generation, validation, middleware (R1.4)
-- [ ] 01-04-PLAN.md -- Dedup module: sliding window bloom filter (R1.2)
-- [ ] 01-05-PLAN.md -- DLQ module: NATS advisory listener, dead letter stream (R1.7)
-- [ ] 01-06-PLAN.md -- Gateway integration: auth, per-key rate limiting, validation, dedup (R1.4, R1.8)
-- [ ] 01-07-PLAN.md -- Parquet compaction job with scheduler (R1.3)
-- [ ] 01-08-PLAN.md -- Reaction engine observability, DLQ, and worker pool (R1.5, R1.6, R1.7)
-- [ ] 01-09-PLAN.md -- Go backend SDK with batching and retry (R1.9)
-- [ ] 01-10-PLAN.md -- Test coverage >= 70% across all Phase 1 modules (R1.10)
+- [x] 01-01-PLAN.md -- Observability foundation (OTel + Prometheus) and proto idempotency_key field
+- [x] 01-02-PLAN.md -- ACK-after-write consumer refactor with worker pool (R1.1, R1.6)
+- [x] 01-03-PLAN.md -- Auth module: API key generation, validation, middleware (R1.4)
+- [x] 01-04-PLAN.md -- Dedup module: sliding window bloom filter (R1.2)
+- [x] 01-05-PLAN.md -- DLQ module: NATS advisory listener, dead letter stream (R1.7)
+- [x] 01-06-PLAN.md -- Gateway integration: auth, per-key rate limiting, validation, dedup (R1.4, R1.8)
+- [x] 01-07-PLAN.md -- Parquet compaction job with scheduler (R1.3)
+- [x] 01-08-PLAN.md -- Reaction engine observability, DLQ, and worker pool (R1.5, R1.6, R1.7)
+- [x] 01-09-PLAN.md -- Go backend SDK with batching and retry (R1.9)
+- [x] 01-10-PLAN.md -- Test coverage >= 70% across all Phase 1 modules (R1.10)
+- [ ] 01-11-PLAN.md -- Gap closure: additional tests for gateway, warehouse, compaction (R1.10)
 
 **Key risks:**
 - Compaction strategy: measure file counts first, then decide compaction vs. Iceberg
