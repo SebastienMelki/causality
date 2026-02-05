@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK
-- **Plan:** 01-05 complete, 5 of 10 plans done
-- **Wave:** 2 of 5 (wave 1 complete, wave 2 plans: 01-05 done)
+- **Plan:** 01-08 complete, 6 of 10 plans done
+- **Wave:** 3 of 5 (wave 3 in progress)
 - **Status:** In progress
-- **Last activity:** 2026-02-05 — Completed 01-03-PLAN.md (Auth Module)
+- **Last activity:** 2026-02-05 — Completed 01-08-PLAN.md (Reaction Engine Observability)
 
-Progress: [█████░░░░░] 5/10 Phase 1 plans
+Progress: [██████░░░░] 6/10 Phase 1 plans
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -34,6 +34,9 @@ Progress: [█████░░░░░] 5/10 Phase 1 plans
 - Partial PostgreSQL index on key_hash WHERE NOT revoked for optimized active key lookup
 - Auth middleware skips /health, /ready, /metrics paths
 - Context-injected app_id via auth.GetAppID(ctx) for downstream handler use
+- Reaction engine metrics on port 9091 (warehouse sink uses 9090)
+- Reaction engine shutdown timeout 30s default (no batch flush, unlike warehouse's 60s)
+- Reaction engine per-message ACK (not deferred batch ACK like warehouse)
 
 ## Completed
 - Project initialization
@@ -46,12 +49,13 @@ Progress: [█████░░░░░] 5/10 Phase 1 plans
 - **01-04**: Dedup module (sliding window bloom filter with bits-and-blooms/bloom/v3, gateway + consumer adapters)
 - **01-05**: Dead letter queue (DLQ module with NATS advisory listener, CAUSALITY_DLQ stream, OTel depth metrics)
 - **01-03**: Auth module (API key generation with SHA256 hashing, X-API-Key middleware, admin CRUD endpoints)
+- **01-08**: Reaction engine observability (OTel/Prometheus metrics, DLQ advisory listener, worker pool, poison message Term())
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-05T18:37:35Z
-- **Stopped at:** Completed 01-03-PLAN.md
+- **Last session:** 2026-02-05T18:45:37Z
+- **Stopped at:** Completed 01-08-PLAN.md
 - **Resume file:** None
-- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-08 (Go SDK) — waves 3-4
+- **Next plans:** 01-06 (Gateway integration), 01-07 (Trino), 01-09 (Go SDK), 01-10 (Integration) — waves 3-5
