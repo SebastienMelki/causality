@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"github.com/caarlos0/env/v10"
 
 	"github.com/SebastienMelki/causality/internal/nats"
+	"github.com/SebastienMelki/causality/internal/observability"
 	"github.com/SebastienMelki/causality/internal/warehouse"
 )
 
@@ -21,6 +23,9 @@ type Config struct {
 
 	// LogFormat is the log format (json, text).
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
+
+	// MetricsAddr is the address for the Prometheus metrics endpoint.
+	MetricsAddr string `env:"METRICS_ADDR" envDefault:":9090"`
 
 	// NATS configuration.
 	NATS nats.Config `envPrefix:""`
@@ -56,11 +61,47 @@ func run() error {
 		"s3_endpoint", cfg.Warehouse.S3.Endpoint,
 		"s3_bucket", cfg.Warehouse.S3.Bucket,
 		"consumer", cfg.ConsumerName,
+		"metrics_addr", cfg.MetricsAddr,
 	)
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize observability (OTel + Prometheus)
+	obs, err := observability.New("warehouse-sink")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if shutErr := obs.Shutdown(context.Background()); shutErr != nil {
+			logger.Error("observability shutdown error", "error", shutErr)
+		}
+	}()
+
+	// Create metrics instruments
+	metrics, err := observability.NewMetrics(obs.Meter())
+	if err != nil {
+		return err
+	}
+
+	// Start metrics and health HTTP server
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", obs.MetricsHandler())
+	metricsMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	metricsServer := &http.Server{
+		Addr:    cfg.MetricsAddr,
+		Handler: metricsMux,
+	}
+	go func() {
+		logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
+		if srvErr := metricsServer.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
+			logger.Error("metrics server error", "error", srvErr)
+		}
+	}()
 
 	// Setup signal handling
 	sigCh := make(chan os.Signal, 1)
@@ -105,6 +146,7 @@ func run() error {
 		cfg.ConsumerName,
 		cfg.NATS.Stream.Name,
 		logger,
+		metrics,
 	)
 
 	if err := consumer.Start(ctx); err != nil {
@@ -121,8 +163,17 @@ func run() error {
 	logger.Info("initiating graceful shutdown")
 	cancel()
 
-	if err := consumer.Stop(context.Background()); err != nil {
+	// Stop consumer with shutdown timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Warehouse.ShutdownTimeout)
+	defer shutdownCancel()
+
+	if err := consumer.Stop(shutdownCtx); err != nil {
 		logger.Error("consumer stop error", "error", err)
+	}
+
+	// Stop metrics server
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("metrics server shutdown error", "error", err)
 	}
 
 	if err := natsClient.Drain(); err != nil {

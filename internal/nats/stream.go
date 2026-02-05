@@ -124,6 +124,52 @@ func (m *StreamManager) ensureConsumer(ctx context.Context, stream jetstream.Str
 	return nil
 }
 
+// EnsureDLQStream creates or updates the dead-letter queue stream.
+// The DLQ stream captures messages republished to "dlq.>" subjects after
+// exceeding their MaxDeliver retry limit on the main stream.
+func (m *StreamManager) EnsureDLQStream(ctx context.Context) (jetstream.Stream, error) {
+	dlqCfg := jetstream.StreamConfig{
+		Name:        m.config.DLQStreamName,
+		Subjects:    []string{"dlq.>"},
+		Storage:     jetstream.FileStorage,
+		MaxAge:      m.config.DLQMaxAge,
+		Retention:   jetstream.LimitsPolicy,
+		Discard:     jetstream.DiscardOld,
+		AllowDirect: true,
+	}
+
+	// Try to get existing stream first
+	_, err := m.js.Stream(ctx, m.config.DLQStreamName)
+	if err == nil {
+		// Stream exists, update it
+		m.logger.Info("updating existing DLQ stream", "name", m.config.DLQStreamName)
+		stream, updateErr := m.js.UpdateStream(ctx, dlqCfg)
+		if updateErr != nil {
+			return nil, fmt.Errorf("failed to update DLQ stream: %w", updateErr)
+		}
+		m.logger.Info("DLQ stream updated", "name", m.config.DLQStreamName)
+		return stream, nil
+	}
+
+	// Stream doesn't exist, create it
+	m.logger.Info("creating new DLQ stream",
+		"name", m.config.DLQStreamName,
+		"subjects", dlqCfg.Subjects,
+		"max_age", m.config.DLQMaxAge,
+	)
+	stream, err := m.js.CreateStream(ctx, dlqCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DLQ stream: %w", err)
+	}
+
+	m.logger.Info("DLQ stream created",
+		"name", m.config.DLQStreamName,
+		"max_age", m.config.DLQMaxAge,
+	)
+
+	return stream, nil
+}
+
 // GetStreamInfo returns information about the stream.
 func (m *StreamManager) GetStreamInfo(ctx context.Context) (*jetstream.StreamInfo, error) {
 	stream, err := m.js.Stream(ctx, m.config.Name)

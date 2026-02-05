@@ -245,6 +245,7 @@ services:
       dockerfile: Dockerfile
       target: warehouse-sink
     container_name: causality-warehouse-sink
+    stop_grace_period: 2m
     depends_on:
       nats:
         condition: service_healthy
@@ -252,6 +253,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    ports:
+      - "9090:9090"   # Prometheus metrics
     environment:
       NATS_URL: "nats://nats:4222"
       S3_ENDPOINT: "http://minio:9000"
@@ -262,6 +265,8 @@ services:
       S3_USE_PATH_STYLE: "true"
       BATCH_MAX_EVENTS: "10"
       BATCH_FLUSH_INTERVAL: "30s"
+      METRICS_ADDR: ":9090"
+      SHUTDOWN_TIMEOUT: "90s"
       LOG_LEVEL: "info"
       LOG_FORMAT: "json"
 
