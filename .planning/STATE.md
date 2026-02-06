@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-07 complete, 7 of 12 plans done
+- **Plan:** 02-08 complete, 8 of 12 plans done
 - **Wave:** 5 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-07-PLAN.md (iOS Swift Wrapper)
+- **Last activity:** 2026-02-06 — Completed 02-08-PLAN.md (Android Kotlin Wrapper)
 
-Progress: [██████████████████░] 18/23 total plans (Phase 1: 11/11, Phase 2: 7/12)
+Progress: [███████████████████░] 19/23 total plans (Phase 1: 11/11, Phase 2: 8/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -82,6 +82,12 @@ Progress: [██████████████████░] 18/23 tota
 - withCheckedThrowingContinuation to bridge sync Go flush to async Swift
 - AnyCodable supports String, Int, Double, Bool property types
 - #if canImport(UIKit) for iOS/macOS platform conditional compilation
+- Android minSdk 21, compileSdk 34, JVM 17 target
+- kotlinx.serialization for JSON bridge (compile-time codegen, no reflection)
+- Coroutine-backed non-blocking track() on Dispatchers.IO with SupervisorJob
+- ProcessLifecycleOwner for automatic background/foreground detection
+- Sealed CausalityException hierarchy for typed error handling
+- .gitignore android/ pattern scoped to root-only (/android/) for sdk/android/ source
 
 ## Completed
 - Project initialization
@@ -108,12 +114,13 @@ Progress: [██████████████████░] 18/23 tota
 - **02-05**: Event batching and HTTP transport (dual-trigger batcher, exponential backoff retry with jitter, 43 tests, 90.1%/87.4% coverage)
 - **02-06**: SDK integration and build infrastructure (full component wiring, metadata injection, lifecycle hooks, gomobile build scripts, 88 tests)
 - **02-07**: iOS Swift wrapper (SPM package, async/await API, Codable types, EventBuilder, Bridge, Platform context, 4 tests)
+- **02-08**: Android Kotlin wrapper (Gradle project, coroutines API, DSL builders, JSON bridge, lifecycle observer, 9 tests)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T10:30:40Z
-- **Stopped at:** Completed 02-07-PLAN.md (iOS Swift Wrapper)
+- **Last session:** 2026-02-06T10:32:00Z
+- **Stopped at:** Completed 02-08-PLAN.md (Android Kotlin Wrapper)
 - **Resume file:** None
-- **Next plan:** Wave 5 continues (02-08 next)
+- **Next plan:** Wave 5 continues (02-09 next)
