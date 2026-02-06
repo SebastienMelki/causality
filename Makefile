@@ -298,23 +298,31 @@ minio-size: ## Show bucket size
 # =============================================================================
 # Mobile SDK (gomobile)
 # =============================================================================
-install-mobile: ## Install gomobile
+.PHONY: mobile-setup mobile-ios mobile-android mobile-all mobile-clean mobile-test
+
+mobile-setup: ## Install gomobile and initialize
 	@echo "Installing gomobile..."
 	@go install golang.org/x/mobile/cmd/gomobile@latest
 	@gomobile init
 
-mobile: ## Build mobile SDKs (iOS and Android)
-	@echo "Building mobile SDKs..."
-	@gomobile bind -target=android -o mobile/causality.aar ./mobile
-	@gomobile bind -target=ios -o mobile/Causality.xcframework ./mobile
+mobile-ios: ## Build iOS SDK (.xcframework)
+	@./scripts/gomobile-build.sh ios
 
-mobile-android: ## Build Android SDK only
-	@echo "Building Android SDK..."
-	@gomobile bind -target=android -o mobile/causality.aar ./mobile
+mobile-android: ## Build Android SDK (.aar)
+	@./scripts/gomobile-build.sh android
 
-mobile-ios: ## Build iOS SDK only
-	@echo "Building iOS SDK..."
-	@gomobile bind -target=ios -o mobile/Causality.xcframework ./mobile
+mobile-all: ## Build both iOS and Android SDKs
+	@./scripts/gomobile-build.sh all
+
+mobile-clean: ## Clean mobile build artifacts
+	@echo "Cleaning mobile build artifacts..."
+	@rm -rf build/mobile
+
+mobile-test: ## Run mobile SDK tests and verify no CGO
+	@echo "Running mobile SDK tests..."
+	@go test ./sdk/mobile/... -v -race
+	@echo "Verifying no CGO dependencies..."
+	@go list -f '{{.CgoFiles}}' ./sdk/mobile/... | grep -v '^\[\]$$' && echo "ERROR: CGO files found!" && exit 1 || echo "OK: No CGO dependencies"
 
 # =============================================================================
 # WebAssembly SDK
