@@ -31,6 +31,15 @@ CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
 CREATE INDEX IF NOT EXISTS idx_events_retry ON events(retry_count, last_retry_at);
 `,
 	},
+	{
+		version: 2,
+		up: `
+CREATE TABLE IF NOT EXISTS device_info (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+`,
+	},
 }
 
 // runMigrations applies all pending migrations inside a transaction.

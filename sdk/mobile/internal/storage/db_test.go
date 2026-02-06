@@ -50,8 +50,8 @@ func TestNewDB_RunsMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("expected schema version 1, got %d", version)
+	if version != 2 {
+		t.Fatalf("expected schema version 2, got %d", version)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestNewDB_RunsMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("expected schema version 1, got %d", version)
+	if version != 2 {
+		t.Fatalf("expected schema version 2, got %d", version)
 	}
 }
 
