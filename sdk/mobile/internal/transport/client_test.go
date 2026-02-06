@@ -2,7 +2,7 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -18,20 +18,30 @@ var fastRetry = &ExponentialBackoff{
 	Jitter:     0,
 }
 
+// testScreenViewEvent returns a valid SDK event JSON with metadata for testing.
+func testScreenViewEvent(screen string) string {
+	return fmt.Sprintf(`{"type":"screen_view","properties":{"screen_name":%q},"metadata":{"app_id":"test-app","device_id":"test-device","timestamp":"2024-01-01T00:00:00Z","idempotency_key":"key-1"}}`, screen)
+}
+
+// batchResponse returns a valid IngestEventBatchResponse protojson string.
+func batchResponse(accepted int) string {
+	return fmt.Sprintf(`{"acceptedCount":%d}`, accepted)
+}
+
 func TestNewClient(t *testing.T) {
 	c := NewClient("https://example.com/", "test-key", 5*time.Second, nil)
 
-	if c.endpoint != "https://example.com" {
-		t.Errorf("endpoint: got %q, want %q", c.endpoint, "https://example.com")
-	}
-	if c.apiKey != "test-key" {
-		t.Errorf("apiKey: got %q, want %q", c.apiKey, "test-key")
-	}
-	if c.userAgent != "CausalitySDK/1.0.0 Go" {
-		t.Errorf("userAgent: got %q, want %q", c.userAgent, "CausalitySDK/1.0.0 Go")
+	if c.endpoint != "https://example.com/" {
+		t.Errorf("endpoint: got %q, want %q", c.endpoint, "https://example.com/")
 	}
 	if c.retry == nil {
 		t.Error("retry should default to DefaultRetry when nil")
+	}
+	if c.rpcClient == nil {
+		t.Error("rpcClient should be initialized")
+	}
+	if c.capture == nil {
+		t.Error("capture should be initialized")
 	}
 }
 
@@ -55,7 +65,7 @@ func TestSendBatch_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requestCount, 1)
 
-		// Verify request
+		// Verify request basics
 		if r.Method != http.MethodPost {
 			t.Errorf("method: got %s, want POST", r.Method)
 		}
@@ -72,25 +82,16 @@ func TestSendBatch_Success(t *testing.T) {
 			t.Errorf("User-Agent: got %q, want %q", r.Header.Get("User-Agent"), "CausalitySDK/1.0.0 Go")
 		}
 
-		// Verify body is a JSON array
-		var events []json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&events); err != nil {
-			t.Errorf("decode body: %v", err)
-		}
-		if len(events) != 2 {
-			t.Errorf("events: got %d, want 2", len(events))
-		}
-
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted": 2}`))
+		w.Write([]byte(batchResponse(2)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
 	events := []string{
-		`{"type":"screen_view","properties":{}}`,
-		`{"type":"button_tap","properties":{}}`,
+		testScreenViewEvent("Home"),
+		testScreenViewEvent("Settings"),
 	}
 
 	result, err := c.SendBatch(context.Background(), events)
@@ -113,20 +114,18 @@ func TestSendBatch_Retry5xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt32(&requestCount, 1)
 		if count == 1 {
-			// First request: 500
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(`{"error":"internal server error"}`))
 			return
 		}
-		// Second request: 200
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted": 1}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	result, err := c.SendBatch(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,20 +143,18 @@ func TestSendBatch_Retry429(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt32(&requestCount, 1)
 		if count == 1 {
-			// First request: 429 with no Retry-After (avoid slow test)
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Write([]byte(`{"error":"rate limited"}`))
 			return
 		}
-		// Second request: 200
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted": 1}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	result, err := c.SendBatch(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,7 +178,7 @@ func TestSendBatch_NoRetry4xx(t *testing.T) {
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	_, err := c.SendBatch(context.Background(), events)
 	if err == nil {
 		t.Fatal("expected error for 400 response")
@@ -203,7 +200,7 @@ func TestSendBatch_NoRetry403(t *testing.T) {
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	_, err := c.SendBatch(context.Background(), events)
 	if err == nil {
 		t.Fatal("expected error for 403 response")
@@ -225,7 +222,7 @@ func TestSendBatch_AllRetriesExhausted(t *testing.T) {
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	_, err := c.SendBatch(context.Background(), events)
 	if err == nil {
 		t.Fatal("expected error after all retries exhausted")
@@ -246,7 +243,7 @@ func TestSendBatch_ContextCanceled(t *testing.T) {
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, &ExponentialBackoff{
-		BaseDelay:  1 * time.Second, // Long delay so context cancels first
+		BaseDelay:  1 * time.Second,
 		MaxDelay:   10 * time.Second,
 		MaxRetries: 10,
 		Jitter:     0,
@@ -255,7 +252,7 @@ func TestSendBatch_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	events := []string{`{"type":"test"}`}
+	events := []string{testScreenViewEvent("Home")}
 	_, err := c.SendBatch(ctx, events)
 	if err == nil {
 		t.Fatal("expected error when context is canceled")
@@ -271,13 +268,13 @@ func TestSendBatch_Retry502(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted":1}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	result, err := c.SendBatch(context.Background(), []string{`{"type":"test"}`})
+	result, err := c.SendBatch(context.Background(), []string{testScreenViewEvent("Home")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,44 +295,18 @@ func TestSendBatch_Retry504(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted":1}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	result, err := c.SendBatch(context.Background(), []string{`{"type":"test"}`})
+	result, err := c.SendBatch(context.Background(), []string{testScreenViewEvent("Home")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result.StatusCode != 200 {
 		t.Errorf("StatusCode: got %d, want 200", result.StatusCode)
-	}
-}
-
-func TestIsRetryableStatus(t *testing.T) {
-	tests := []struct {
-		code int
-		want bool
-	}{
-		{200, false},
-		{201, false},
-		{400, false},
-		{401, false},
-		{403, false},
-		{404, false},
-		{429, true},
-		{500, true},
-		{502, true},
-		{503, true},
-		{504, true},
-	}
-
-	for _, tt := range tests {
-		got := isRetryableStatus(tt.code)
-		if got != tt.want {
-			t.Errorf("isRetryableStatus(%d): got %v, want %v", tt.code, got, tt.want)
-		}
 	}
 }
 
@@ -349,7 +320,6 @@ func TestRetryDelay_NoRetryAfterHeader(t *testing.T) {
 }
 
 func TestRetryDelay_RetryAfterSeconds(t *testing.T) {
-	// Use a retry strategy with tiny delays so the Retry-After header dominates
 	c := NewClient("https://example.com", "key", 5*time.Second, &ExponentialBackoff{
 		BaseDelay:  1 * time.Millisecond,
 		MaxDelay:   10 * time.Millisecond,
@@ -357,7 +327,6 @@ func TestRetryDelay_RetryAfterSeconds(t *testing.T) {
 		Jitter:     0,
 	})
 
-	// Retry-After: 5 (seconds) is larger than strategy delay (1ms)
 	delay := c.retryDelay(0, "5")
 	if delay != 5*time.Second {
 		t.Errorf("expected 5s from Retry-After header, got %v", delay)
@@ -365,7 +334,6 @@ func TestRetryDelay_RetryAfterSeconds(t *testing.T) {
 }
 
 func TestRetryDelay_RetryAfterSmallerThanStrategy(t *testing.T) {
-	// Strategy delay is much larger than Retry-After
 	c := NewClient("https://example.com", "key", 5*time.Second, &ExponentialBackoff{
 		BaseDelay:  10 * time.Second,
 		MaxDelay:   1 * time.Minute,
@@ -373,7 +341,6 @@ func TestRetryDelay_RetryAfterSmallerThanStrategy(t *testing.T) {
 		Jitter:     0,
 	})
 
-	// Retry-After: 1 (second) is smaller than strategy delay (10s)
 	delay := c.retryDelay(0, "1")
 	if delay != 10*time.Second {
 		t.Errorf("expected 10s from strategy (larger), got %v", delay)
@@ -388,10 +355,8 @@ func TestRetryDelay_RetryAfterHTTPDate(t *testing.T) {
 		Jitter:     0,
 	})
 
-	// HTTP-date 1 hour from now should be larger than strategy delay
 	futureDate := time.Now().Add(1 * time.Hour).UTC().Format(http.TimeFormat)
 	delay := c.retryDelay(0, futureDate)
-	// Should use the HTTP-date delay (roughly 1 hour)
 	if delay < 59*time.Minute {
 		t.Errorf("expected ~1h from Retry-After date, got %v", delay)
 	}
@@ -400,7 +365,6 @@ func TestRetryDelay_RetryAfterHTTPDate(t *testing.T) {
 func TestRetryDelay_RetryAfterInvalidValue(t *testing.T) {
 	c := NewClient("https://example.com", "key", 5*time.Second, fastRetry)
 
-	// Invalid Retry-After should fall back to strategy delay
 	delay := c.retryDelay(0, "not-a-number-or-date")
 	strategyDelay := fastRetry.NextDelay(0)
 	if delay != strategyDelay {
@@ -411,7 +375,6 @@ func TestRetryDelay_RetryAfterInvalidValue(t *testing.T) {
 func TestRetryDelay_MaxRetriesExhausted(t *testing.T) {
 	c := NewClient("https://example.com", "key", 5*time.Second, fastRetry)
 
-	// Attempt beyond MaxRetries should return 0
 	delay := c.retryDelay(fastRetry.MaxRetries, "5")
 	if delay != 0 {
 		t.Errorf("expected 0 for exhausted retries, got %v", delay)
@@ -423,20 +386,19 @@ func TestSendBatch_Retry429WithRetryAfterHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt32(&requestCount, 1)
 		if count == 1 {
-			// 429 with a small Retry-After value
 			w.Header().Set("Retry-After", "0")
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Write([]byte(`{"error":"rate limited"}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"accepted": 1}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	result, err := c.SendBatch(context.Background(), []string{`{"type":"test"}`})
+	result, err := c.SendBatch(context.Background(), []string{testScreenViewEvent("Home")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -459,28 +421,34 @@ func TestSendBatch_ContextCanceledBeforeFirstRequest(t *testing.T) {
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	_, err := c.SendBatch(ctx, []string{`{"type":"test"}`})
+	_, err := c.SendBatch(ctx, []string{testScreenViewEvent("Home")})
 	if err == nil {
 		t.Fatal("expected error when context is already canceled")
 	}
 }
 
-func TestSendBatch_ResponseWithoutAcceptedField(t *testing.T) {
+func TestSendBatch_StatusCaptureResets(t *testing.T) {
+	// Verify that the status capture resets between attempts
+	var requestCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+		if count == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":"unavailable"}`))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.Write([]byte(batchResponse(1)))
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-key", 5*time.Second, fastRetry)
 
-	events := []string{`{"type":"test1"}`, `{"type":"test2"}`}
-	result, err := c.SendBatch(context.Background(), events)
+	result, err := c.SendBatch(context.Background(), []string{testScreenViewEvent("Home")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should default to len(events) when response doesn't contain accepted field
-	if result.Accepted != 2 {
-		t.Errorf("Accepted: got %d, want 2 (default to len(events))", result.Accepted)
+	if result.Accepted != 1 {
+		t.Errorf("Accepted: got %d, want 1", result.Accepted)
 	}
 }

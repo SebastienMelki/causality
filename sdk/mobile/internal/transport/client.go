@@ -1,15 +1,15 @@
 package transport
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
+	"log"
 	"net/http"
 	"strconv"
-	"strings"
+	"sync"
 	"time"
+
+	causalityv1 "github.com/SebastienMelki/causality/pkg/proto/causality/v1"
 )
 
 // SendResult holds the outcome of a batch send operation.
@@ -21,17 +21,51 @@ type SendResult struct {
 	Accepted int
 }
 
-// Client sends event batches to the Causality server over HTTP.
-// It handles retries with configurable backoff strategies.
-type Client struct {
-	httpClient *http.Client
-	endpoint   string
-	apiKey     string
-	retry      RetryStrategy
-	userAgent  string
+// statusCapture wraps an http.RoundTripper to capture the HTTP status code
+// and Retry-After header from responses. This enables retry decisions when
+// using the generated protobuf client, which doesn't expose raw HTTP details.
+type statusCapture struct {
+	transport  http.RoundTripper
+	mu         sync.Mutex
+	lastStatus int
+	retryAfter string
 }
 
-// NewClient creates a new HTTP transport client.
+func (s *statusCapture) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := s.transport.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+	s.mu.Lock()
+	s.lastStatus = resp.StatusCode
+	s.retryAfter = resp.Header.Get("Retry-After")
+	s.mu.Unlock()
+	return resp, nil
+}
+
+func (s *statusCapture) reset() {
+	s.mu.Lock()
+	s.lastStatus = 0
+	s.retryAfter = ""
+	s.mu.Unlock()
+}
+
+func (s *statusCapture) getLastStatus() (int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastStatus, s.retryAfter
+}
+
+// Client sends event batches to the Causality server using the generated
+// protobuf HTTP client. It handles retries with configurable backoff strategies.
+type Client struct {
+	rpcClient causalityv1.EventServiceClient
+	capture   *statusCapture
+	retry     RetryStrategy
+	endpoint  string
+}
+
+// NewClient creates a new transport client backed by the generated protobuf client.
 //
 // endpoint is the base URL of the Causality server (e.g., "https://analytics.example.com").
 // apiKey is the API key for authentication.
@@ -42,22 +76,34 @@ func NewClient(endpoint, apiKey string, timeout time.Duration, retry RetryStrate
 		retry = DefaultRetry
 	}
 
-	// Normalize endpoint: strip trailing slash
-	endpoint = strings.TrimRight(endpoint, "/")
+	capture := &statusCapture{transport: http.DefaultTransport}
+
+	httpClient := &http.Client{
+		Timeout:   timeout,
+		Transport: capture,
+	}
+
+	rpcClient := causalityv1.NewEventServiceClient(
+		endpoint,
+		causalityv1.WithEventServiceHTTPClient(httpClient),
+		causalityv1.WithEventServiceContentType(causalityv1.ContentTypeJSON),
+		causalityv1.WithEventServiceDefaultHeader("X-API-Key", apiKey),
+		causalityv1.WithEventServiceDefaultHeader("User-Agent", "CausalitySDK/1.0.0 Go"),
+	)
 
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
-		endpoint:  endpoint,
-		apiKey:    apiKey,
+		rpcClient: rpcClient,
+		capture:   capture,
 		retry:     retry,
-		userAgent: "CausalitySDK/1.0.0 Go",
+		endpoint:  endpoint,
 	}
 }
 
 // SendBatch sends a batch of serialized event JSON strings to the server.
-// It retries on 5xx and 429 responses with the configured retry strategy.
+// Each JSON string is an SDK Event with type, properties, and metadata.
+// Events are converted to protobuf EventEnvelopes and sent via IngestEventBatch.
+//
+// It retries on 5xx, 429, and network errors with the configured retry strategy.
 // Non-retryable errors (4xx except 429) return immediately.
 // The context can be used for cancellation.
 func (c *Client) SendBatch(ctx context.Context, events []string) (*SendResult, error) {
@@ -65,95 +111,63 @@ func (c *Client) SendBatch(ctx context.Context, events []string) (*SendResult, e
 		return &SendResult{StatusCode: 200, Accepted: 0}, nil
 	}
 
-	// Build request body: JSON array of raw event JSON strings.
-	// Each event is already a JSON string, so we parse them into raw messages
-	// to build a proper JSON array.
-	rawEvents := make([]json.RawMessage, len(events))
-	for i, e := range events {
-		rawEvents[i] = json.RawMessage(e)
-	}
-
-	body, err := json.Marshal(rawEvents)
+	// Convert SDK JSON events to protobuf EventEnvelopes
+	envelopes, err := convertEvents(events)
 	if err != nil {
-		return nil, fmt.Errorf("marshal batch: %w", err)
+		return nil, fmt.Errorf("convert events: %w", err)
 	}
 
-	url := c.endpoint + "/v1/events/batch"
+	req := &causalityv1.IngestEventBatchRequest{
+		Events: envelopes,
+	}
+
+	log.Printf("[Causality:Transport] IngestEventBatch %s (%d events)", c.endpoint, len(events))
 
 	var lastErr error
 	maxAttempts := c.retry.MaxAttempts()
 
 	for attempt := 0; attempt <= maxAttempts; attempt++ {
-		// Check context before each attempt
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("context canceled: %w", err)
 		}
 
-		// Build request
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		// Reset captured status before each attempt
+		c.capture.reset()
+
+		resp, err := c.rpcClient.IngestEventBatch(ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
-		}
+			status, retryAfter := c.capture.getLastStatus()
 
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-API-Key", c.apiKey)
-		req.Header.Set("User-Agent", c.userAgent)
+			log.Printf("[Causality:Transport] Error (HTTP %d): %v", status, err)
 
-		// Execute request
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("http request: %w", err)
+			// Non-retryable client error (4xx except 429)
+			if status >= 400 && status < 500 && status != http.StatusTooManyRequests {
+				return nil, fmt.Errorf("non-retryable error: %w", err)
+			}
 
-			// Network errors are retryable
-			delay := c.retry.NextDelay(attempt)
+			// Retryable: network error (status 0), 429, or 5xx
+			lastErr = err
+
+			delay := c.retryDelay(attempt, retryAfter)
 			if delay == 0 {
 				break
 			}
+
+			log.Printf("[Causality:Transport] Retrying in %v (attempt %d/%d)", delay, attempt+1, maxAttempts)
+
 			if !sleepWithContext(ctx, delay) {
 				return nil, fmt.Errorf("context canceled during retry wait: %w", ctx.Err())
 			}
 			continue
 		}
 
-		// Read and close body
-		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		log.Printf("[Causality:Transport] Success: accepted=%d, rejected=%d",
+			resp.AcceptedCount, resp.RejectedCount)
 
-		// Success
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			result := &SendResult{
-				StatusCode: resp.StatusCode,
-				Accepted:   len(events),
-			}
-
-			// Try to parse accepted count from response if available
-			var respData struct {
-				Accepted int `json:"accepted"`
-			}
-			if json.Unmarshal(respBody, &respData) == nil && respData.Accepted > 0 {
-				result.Accepted = respData.Accepted
-			}
-
-			return result, nil
-		}
-
-		// Non-retryable client error (4xx except 429)
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests {
-			return nil, fmt.Errorf("non-retryable error: HTTP %d: %s", resp.StatusCode, string(respBody))
-		}
-
-		// Retryable: 429 or 5xx
-		lastErr = fmt.Errorf("retryable error: HTTP %d: %s", resp.StatusCode, string(respBody))
-
-		// Check for Retry-After header
-		delay := c.retryDelay(attempt, resp.Header.Get("Retry-After"))
-		if delay == 0 {
-			break
-		}
-
-		if !sleepWithContext(ctx, delay) {
-			return nil, fmt.Errorf("context canceled during retry wait: %w", ctx.Err())
-		}
+		return &SendResult{
+			StatusCode: 200,
+			Accepted:   int(resp.AcceptedCount),
+		}, nil
 	}
 
 	if lastErr != nil {
@@ -169,7 +183,7 @@ func (c *Client) SendBatch(ctx context.Context, events []string) (*SendResult, e
 func (c *Client) retryDelay(attempt int, retryAfter string) time.Duration {
 	strategyDelay := c.retry.NextDelay(attempt)
 	if strategyDelay == 0 {
-		return 0 // No more retries
+		return 0
 	}
 
 	if retryAfter == "" {
@@ -179,7 +193,6 @@ func (c *Client) retryDelay(attempt int, retryAfter string) time.Duration {
 	// Try parsing as seconds
 	if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
 		headerDelay := time.Duration(seconds) * time.Second
-		// Use the larger of the two delays
 		if headerDelay > strategyDelay {
 			return headerDelay
 		}
@@ -195,20 +208,6 @@ func (c *Client) retryDelay(attempt int, retryAfter string) time.Duration {
 	}
 
 	return strategyDelay
-}
-
-// isRetryableStatus returns true for HTTP status codes that warrant a retry.
-func isRetryableStatus(code int) bool {
-	switch code {
-	case http.StatusTooManyRequests,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusServiceUnavailable,
-		http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
-	}
 }
 
 // sleepWithContext sleeps for the given duration or until the context is canceled.
