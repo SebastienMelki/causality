@@ -93,18 +93,11 @@ class ViewController: UIViewController {
     // MARK: - SDK Integration
 
     private func trackScreenView() {
-        Causality.shared.trackScreenView(name: "main_screen")
+        Causality.shared.track(ScreenView(screenName: "main_screen"))
     }
 
     @objc private func trackButtonTapped() {
-        // Track using builder pattern
-        let event = EventBuilder(type: "button_tap")
-            .property("button_name", "track_event")
-            .property("screen", "main_screen")
-            .property("tap_count", 1)
-            .build()
-
-        Causality.shared.track(event)
+        Causality.shared.track(ButtonTap(buttonId: "track_event", screenName: "main_screen"))
         print("[UIKitExample] Event tracked: button_tap")
 
         // Visual feedback

@@ -8,90 +8,67 @@ struct ContentView: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 20) {
-                // Device ID
-                Text("Device ID:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(Causality.shared.deviceId)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 20)
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Device ID
+                    Text("Device ID:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(Causality.shared.deviceId)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 8)
 
-                // Track Event Button
-                Button(action: trackEvent) {
-                    HStack {
-                        Image(systemName: "bolt.fill")
-                        Text("Track Event")
+                    // Track Event Button
+                    Button(action: trackEvent) {
+                        Label("Track Event", systemImage: "bolt.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
+                    .buttonStyle(.borderedProminent)
 
-                // Track Purchase Button
-                Button(action: trackPurchase) {
-                    HStack {
-                        Image(systemName: "cart.fill")
-                        Text("Track Purchase")
+                    // Track Purchase Button
+                    Button(action: trackPurchase) {
+                        Label("Track Purchase", systemImage: "cart.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
 
-                // Identify User Button
-                Button(action: identifyUser) {
-                    HStack {
-                        Image(systemName: "person.fill")
-                        Text("Identify User")
+                    // Identify User Button
+                    Button(action: identifyUser) {
+                        Label("Identify User", systemImage: "person.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
 
-                // Flush Button
-                Button(action: flushEvents) {
-                    HStack {
-                        if isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Image(systemName: "arrow.up.circle.fill")
+                    // Flush Button
+                    Button(action: flushEvents) {
+                        HStack {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "arrow.up.circle.fill")
+                            }
+                            Text("Flush Events")
                         }
-                        Text("Flush Events")
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-                .disabled(isLoading)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(isLoading)
 
-                // Reset Button
-                Button(action: resetUser) {
-                    HStack {
-                        Image(systemName: "arrow.counterclockwise")
-                        Text("Reset User")
+                    // Reset Button
+                    Button(action: resetUser) {
+                        Label("Reset User", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
                 }
-
-                Spacer()
+                .padding()
             }
-            .padding()
             .navigationTitle("Causality SwiftUI")
             .onAppear {
                 trackScreenView()
@@ -135,30 +112,22 @@ struct ContentView: View {
     }
 
     private func trackScreenView() {
-        Causality.shared.trackScreenView(name: "content_view")
+        Causality.shared.track(ScreenView(screenName: "content_view"))
         print("[SwiftUIExample] Screen view tracked: content_view")
     }
 
     private func trackEvent() {
-        let event = EventBuilder(type: "button_tap")
-            .property("button_name", "track_event")
-            .property("screen", "content_view")
-            .build()
-
-        Causality.shared.track(event)
+        Causality.shared.track(ButtonTap(buttonId: "track_event", screenName: "content_view"))
         print("[SwiftUIExample] Event tracked: button_tap")
         showToast("Event tracked!")
     }
 
     private func trackPurchase() {
-        let event = EventBuilder(type: "purchase")
-            .property("product_id", "pro-subscription")
-            .property("price", 9.99)
-            .property("currency", "USD")
-            .property("quantity", 1)
-            .build()
-
-        Causality.shared.track(event)
+        Causality.shared.track(PurchaseComplete(
+            orderId: "order-\(UUID().uuidString.prefix(8))",
+            totalCents: 999,
+            currency: "USD"
+        ))
         print("[SwiftUIExample] Event tracked: purchase")
         showToast("Purchase tracked!")
     }

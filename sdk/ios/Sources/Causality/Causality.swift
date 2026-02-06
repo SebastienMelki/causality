@@ -42,7 +42,7 @@ public final class Causality {
         isInitialized = true
     }
 
-    /// Track an event
+    /// Track a freeform event
     /// - Parameter event: The event to track
     /// - Note: This method is non-blocking. Events are queued for batch sending.
     public func track(_ event: Event) {
@@ -56,6 +56,28 @@ public final class Causality {
         Task.detached(priority: .utility) {
             do {
                 try Bridge.track(event: event)
+            } catch {
+                #if DEBUG
+                print("[Causality] Track error: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// Track a typed event with compile-time safety
+    /// - Parameter event: A CausalityEvent (e.g., ScreenView, ButtonTap, PurchaseComplete)
+    /// - Note: This method is non-blocking. Events are queued for batch sending.
+    public func track<E: CausalityEvent>(_ event: E) {
+        guard isInitialized else {
+            #if DEBUG
+            print("[Causality] Warning: SDK not initialized, event dropped")
+            #endif
+            return
+        }
+
+        Task.detached(priority: .utility) {
+            do {
+                try Bridge.trackTyped(event: event)
             } catch {
                 #if DEBUG
                 print("[Causality] Track error: \(error)")
@@ -147,16 +169,12 @@ public final class Causality {
 
 public extension Causality {
     /// Track a screen view
-    func trackScreenView(name: String, properties: [String: AnyCodable]? = nil) {
-        var props = properties ?? [:]
-        props["screen_name"] = AnyCodable(name)
-        track(Event(type: "screen_view", properties: props))
+    func trackScreenView(name: String, screenClass: String? = nil, previousScreen: String? = nil) {
+        track(ScreenView(screenName: name, screenClass: screenClass, previousScreen: previousScreen))
     }
 
     /// Track a button tap
-    func trackButtonTap(name: String, properties: [String: AnyCodable]? = nil) {
-        var props = properties ?? [:]
-        props["button_name"] = AnyCodable(name)
-        track(Event(type: "button_tap", properties: props))
+    func trackButtonTap(id: String, text: String? = nil, screenName: String? = nil) {
+        track(ButtonTap(buttonId: id, buttonText: text, screenName: screenName))
     }
 }

@@ -8,7 +8,9 @@ enum Bridge {
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw CausalityError.encoding("Failed to encode config")
         }
-        let result = MobileInit(jsonString)
+        print("[Causality:Bridge] Init JSON: \(jsonString)")
+        let result = CAUMobileInit(jsonString)
+        print("[Causality:Bridge] Init result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.initialization(result)
         }
@@ -19,7 +21,23 @@ enum Bridge {
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw CausalityError.encoding("Failed to encode event")
         }
-        let result = MobileTrack(jsonString)
+        print("[Causality:Bridge] Track JSON: \(jsonString)")
+        let result = CAUMobileTrack(jsonString)
+        print("[Causality:Bridge] Track result: '\(result)'")
+        if !result.isEmpty {
+            throw CausalityError.tracking(result)
+        }
+    }
+
+    static func trackTyped<E: CausalityEvent>(event: E) throws {
+        let propsData = try JSONEncoder().encode(event)
+        guard let propsJSON = String(data: propsData, encoding: .utf8) else {
+            throw CausalityError.encoding("Failed to encode event properties")
+        }
+        let jsonString = "{\"type\":\"\(E.eventType)\",\"properties\":\(propsJSON)}"
+        print("[Causality:Bridge] Track JSON: \(jsonString)")
+        let result = CAUMobileTrack(jsonString)
+        print("[Causality:Bridge] Track result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.tracking(result)
         }
@@ -43,46 +61,60 @@ enum Bridge {
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw CausalityError.encoding("Failed to encode user")
         }
-        let result = MobileSetUser(jsonString)
+        print("[Causality:Bridge] SetUser JSON: \(jsonString)")
+        let result = CAUMobileSetUser(jsonString)
+        print("[Causality:Bridge] SetUser result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.identification(result)
         }
     }
 
     static func reset() throws {
-        let result = MobileReset()
+        print("[Causality:Bridge] Reset called")
+        let result = CAUMobileReset()
+        print("[Causality:Bridge] Reset result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.reset(result)
         }
     }
 
     static func resetAll() throws {
-        let result = MobileResetAll()
+        print("[Causality:Bridge] ResetAll called")
+        let result = CAUMobileResetAll()
+        print("[Causality:Bridge] ResetAll result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.reset(result)
         }
     }
 
     static func flush() throws {
-        let result = MobileFlush()
+        print("[Causality:Bridge] Flush called")
+        let result = CAUMobileFlush()
+        print("[Causality:Bridge] Flush result: '\(result)'")
         if !result.isEmpty {
             throw CausalityError.flush(result)
         }
     }
 
     static func getDeviceId() -> String {
-        MobileGetDeviceId()
+        let result = CAUMobileGetDeviceId()
+        print("[Causality:Bridge] GetDeviceId: '\(result)'")
+        return result
     }
 
     static func isInitialized() -> Bool {
-        MobileIsInitialized()
+        let result = CAUMobileIsInitialized()
+        print("[Causality:Bridge] IsInitialized: \(result)")
+        return result
     }
 
     static func appDidEnterBackground() {
-        _ = MobileAppDidEnterBackground()
+        print("[Causality:Bridge] AppDidEnterBackground called")
+        _ = CAUMobileAppDidEnterBackground()
     }
 
     static func appWillEnterForeground() {
-        _ = MobileAppWillEnterForeground()
+        print("[Causality:Bridge] AppWillEnterForeground called")
+        _ = CAUMobileAppWillEnterForeground()
     }
 }
