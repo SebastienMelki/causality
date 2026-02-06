@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-03 complete, 2 of 12 plans done
+- **Plan:** 02-02 complete, 3 of 12 plans done
 - **Wave:** 2 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-03-PLAN.md (Session Tracking)
+- **Last activity:** 2026-02-06 — Completed 02-02-PLAN.md (SQLite Persistent Event Queue)
 
-Progress: [█████████████░] 13/23 total plans (Phase 1: 11/11, Phase 2: 2/12)
+Progress: [██████████████░] 14/23 total plans (Phase 1: 11/11, Phase 2: 3/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -58,6 +58,10 @@ Progress: [█████████████░] 13/23 total plans (Phase 
 - Injectable clockFunc for time-dependent testing: avoids time.Sleep, enables deterministic timeout verification
 - Background does NOT end session: only AppWillEnterForeground checks timeout (industry standard behavior)
 - Session events as map[string]interface{}: lightweight property maps for SDK layer to wrap into full Event structs
+- SQLite driver: modernc.org/sqlite (pure Go, no CGO) mandatory for gomobile cross-compilation
+- WAL mode + 5s busy timeout for concurrent SQLite access from multiple SDK subsystems
+- INSERT OR IGNORE for duplicate idempotency keys: silent dedup, original event preserved
+- FIFO eviction: oldest events deleted when queue reaches maxSize capacity
 
 ## Completed
 - Project initialization
@@ -78,13 +82,14 @@ Progress: [█████████████░] 13/23 total plans (Phase 
 - **01-11**: Test coverage gap closure (gateway service.go 97.2%, warehouse consumer workerLoop 90.9%, compaction pure logic 100%)
 - Phase 2 planning (12 plans, 7 waves)
 - **02-01**: Go mobile core (JSON bridge, 13 typed event structs, ErrorCallback system, 97.8% coverage)
+- **02-02**: SQLite persistent event queue (modernc.org/sqlite, FIFO with eviction, 30 tests, 82.3% coverage)
 - **02-03**: Session tracking (hybrid timeout + lifecycle tracker, 27 tests, 98.5% coverage)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T09:59:42Z
-- **Stopped at:** Completed 02-03-PLAN.md (Session Tracking)
+- **Last session:** 2026-02-06T10:06:48Z
+- **Stopped at:** Completed 02-02-PLAN.md (SQLite Persistent Event Queue)
 - **Resume file:** None
-- **Next plan:** Wave 2 continues (02-02, 02-04 parallel)
+- **Next plan:** Wave 2 continues (02-04 next)
