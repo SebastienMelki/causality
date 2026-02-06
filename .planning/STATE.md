@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-01 complete, 1 of 12 plans done
-- **Wave:** 1 of 7
+- **Plan:** 02-03 complete, 2 of 12 plans done
+- **Wave:** 2 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-01-PLAN.md (Go Mobile Core with JSON Bridge)
+- **Last activity:** 2026-02-06 — Completed 02-03-PLAN.md (Session Tracking)
 
-Progress: [████████████░] 12/23 total plans (Phase 1: 11/11, Phase 2: 1/12)
+Progress: [█████████████░] 13/23 total plans (Phase 1: 11/11, Phase 2: 2/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -54,6 +54,10 @@ Progress: [████████████░] 12/23 total plans (Phase 1: 
 - JSON bridge pattern: complex data as JSON strings, parsed internally with validation
 - Error return convention: exported functions return string (empty=success, message=error)
 - Async error callbacks: notifyErrorCallbacks fires goroutines per callback, never blocks caller
+- Session tracker uses sync.Mutex (not RWMutex): RecordActivity always writes lastActivity, making RLock fast-path invalid
+- Injectable clockFunc for time-dependent testing: avoids time.Sleep, enables deterministic timeout verification
+- Background does NOT end session: only AppWillEnterForeground checks timeout (industry standard behavior)
+- Session events as map[string]interface{}: lightweight property maps for SDK layer to wrap into full Event structs
 
 ## Completed
 - Project initialization
@@ -74,12 +78,13 @@ Progress: [████████████░] 12/23 total plans (Phase 1: 
 - **01-11**: Test coverage gap closure (gateway service.go 97.2%, warehouse consumer workerLoop 90.9%, compaction pure logic 100%)
 - Phase 2 planning (12 plans, 7 waves)
 - **02-01**: Go mobile core (JSON bridge, 13 typed event structs, ErrorCallback system, 97.8% coverage)
+- **02-03**: Session tracking (hybrid timeout + lifecycle tracker, 27 tests, 98.5% coverage)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T09:52:41Z
-- **Stopped at:** Completed 02-01-PLAN.md (Go Mobile Core with JSON Bridge)
+- **Last session:** 2026-02-06T09:59:42Z
+- **Stopped at:** Completed 02-03-PLAN.md (Session Tracking)
 - **Resume file:** None
-- **Next plan:** 02-02-PLAN.md (SQLite persistent event queue)
+- **Next plan:** Wave 2 continues (02-02, 02-04 parallel)
