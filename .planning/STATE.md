@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-02 complete, 3 of 12 plans done
-- **Wave:** 2 of 7
+- **Plan:** 02-04 complete, 4 of 12 plans done
+- **Wave:** 3 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-02-PLAN.md (SQLite Persistent Event Queue)
+- **Last activity:** 2026-02-06 — Completed 02-04-PLAN.md (Device Context, ID, and User Identity)
 
-Progress: [██████████████░] 14/23 total plans (Phase 1: 11/11, Phase 2: 3/12)
+Progress: [███████████████░] 15/23 total plans (Phase 1: 11/11, Phase 2: 4/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -62,6 +62,11 @@ Progress: [██████████████░] 14/23 total plans (Pha
 - WAL mode + 5s busy timeout for concurrent SQLite access from multiple SDK subsystems
 - INSERT OR IGNORE for duplicate idempotency keys: silent dedup, original event preserved
 - FIFO eviction: oldest events deleted when queue reaches maxSize capacity
+- device_info table as generic key-value store for device ID and user identity
+- INSERT OR REPLACE for device_info upsert semantics
+- Defensive copy on GetUser() to prevent external mutation of cached state
+- Double-check locking pattern for cached device ID retrieval (RLock fast path + Lock re-check)
+- SetNetworkInfo separate from SetPlatformContext for runtime network updates
 
 ## Completed
 - Project initialization
@@ -84,12 +89,13 @@ Progress: [██████████████░] 14/23 total plans (Pha
 - **02-01**: Go mobile core (JSON bridge, 13 typed event structs, ErrorCallback system, 97.8% coverage)
 - **02-02**: SQLite persistent event queue (modernc.org/sqlite, FIFO with eviction, 30 tests, 82.3% coverage)
 - **02-03**: Session tracking (hybrid timeout + lifecycle tracker, 27 tests, 98.5% coverage)
+- **02-04**: Device context, ID, and user identity (platform context bridge, SQLite-persisted device ID, identity manager, 26 tests, 90.7%/88.7% coverage)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T10:06:48Z
-- **Stopped at:** Completed 02-02-PLAN.md (SQLite Persistent Event Queue)
+- **Last session:** 2026-02-06T10:14:06Z
+- **Stopped at:** Completed 02-04-PLAN.md (Device Context, ID, and User Identity)
 - **Resume file:** None
-- **Next plan:** Wave 2 continues (02-04 next)
+- **Next plan:** Wave 3 continues (02-05 next)
