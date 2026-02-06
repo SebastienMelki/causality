@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-05 complete, 5 of 12 plans done
-- **Wave:** 3 of 7
+- **Plan:** 02-06 complete, 6 of 12 plans done
+- **Wave:** 4 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-05-PLAN.md (Event Batching and HTTP Transport)
+- **Last activity:** 2026-02-06 — Completed 02-06-PLAN.md (SDK Integration and Build Infrastructure)
 
-Progress: [████████████████░] 16/23 total plans (Phase 1: 11/11, Phase 2: 5/12)
+Progress: [█████████████████░] 17/23 total plans (Phase 1: 11/11, Phase 2: 6/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -71,6 +71,10 @@ Progress: [████████████████░] 16/23 total plan
 - Non-blocking Add(): buffered flushCh (capacity 1) so event tracking never blocks caller
 - Final flush on Stop(): ensures queued events are not lost on SDK shutdown
 - Retry-After header: max(headerDelay, strategyDelay) so server backoff is honored but never weakens client backoff
+- Temp directory fallback when DataPath not configured (for tests and quick prototyping)
+- ResetAll uses SetEnabled(false/true) to end session via session tracker API
+- Background flush on AppDidEnterBackground to persist events before potential termination
+- Ordered cleanup in resetForTesting: cancel context -> Stop batcher -> Close DB
 
 ## Completed
 - Project initialization
@@ -95,12 +99,13 @@ Progress: [████████████████░] 16/23 total plan
 - **02-03**: Session tracking (hybrid timeout + lifecycle tracker, 27 tests, 98.5% coverage)
 - **02-04**: Device context, ID, and user identity (platform context bridge, SQLite-persisted device ID, identity manager, 26 tests, 90.7%/88.7% coverage)
 - **02-05**: Event batching and HTTP transport (dual-trigger batcher, exponential backoff retry with jitter, 43 tests, 90.1%/87.4% coverage)
+- **02-06**: SDK integration and build infrastructure (full component wiring, metadata injection, lifecycle hooks, gomobile build scripts, 88 tests)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T10:17:26Z
-- **Stopped at:** Completed 02-05-PLAN.md (Event Batching and HTTP Transport)
+- **Last session:** 2026-02-06T10:33:00Z
+- **Stopped at:** Completed 02-06-PLAN.md (SDK Integration and Build Infrastructure)
 - **Resume file:** None
-- **Next plan:** Wave 3 continues (02-06 next)
+- **Next plan:** Wave 4 continues (02-07 next)
