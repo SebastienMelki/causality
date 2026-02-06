@@ -3,6 +3,7 @@ package mobile
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 )
 
 // ErrorSeverity indicates how critical an error is.
@@ -133,11 +134,7 @@ func wrapError(err error) string {
 	return err.Error()
 }
 
-// debugLog is a simple logging helper for debug output.
-// Uses fmt.Sprintf for formatting. Platform-specific logging
-// is handled by native wrappers.
+// debugLog prints debug output to stderr, which appears in Xcode console and Logcat.
 func debugLog(format string, args ...interface{}) {
-	// In debug mode, format the message. Platform-specific native wrappers
-	// (Swift os_log, Kotlin Logcat) will override this via callbacks.
-	_ = fmt.Sprintf(format, args...)
+	log.Printf("[Causality] "+format, args...)
 }

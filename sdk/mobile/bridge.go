@@ -11,7 +11,7 @@ type UserIdentity struct {
 	UserID string `json:"user_id"`
 
 	// Traits are key-value attributes about the user (e.g., name, email, plan).
-	Traits map[string]string `json:"traits,omitempty"`
+	Traits map[string]interface{} `json:"traits,omitempty"`
 
 	// Aliases are alternative identifiers for the user (for identity resolution).
 	Aliases []string `json:"aliases,omitempty"`

@@ -290,16 +290,7 @@ func SetUser(userJSON string) string {
 		return sdkErr.Error()
 	}
 
-	// Convert bridge traits (map[string]string) to identity traits (map[string]interface{})
-	var traits map[string]interface{}
-	if user.Traits != nil {
-		traits = make(map[string]interface{}, len(user.Traits))
-		for k, v := range user.Traits {
-			traits[k] = v
-		}
-	}
-
-	if err := inst.identityManager.SetUser(user.UserID, traits, user.Aliases); err != nil {
+	if err := inst.identityManager.SetUser(user.UserID, user.Traits, user.Aliases); err != nil {
 		sdkErr := &SDKError{
 			Code:     ErrCodeDiskError,
 			Message:  fmt.Sprintf("failed to persist user identity: %s", err.Error()),

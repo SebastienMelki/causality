@@ -11,24 +11,24 @@ let package = Package(
     products: [
         .library(
             name: "Causality",
-            targets: ["CausalitySwift"]
+            targets: ["Causality"]
         )
     ],
     targets: [
         // Binary target for Go core (local path for development)
         .binaryTarget(
             name: "CausalityCore",
-            path: "../../build/mobile/Causality.xcframework"
+            path: "../../build/mobile/CausalityCore.xcframework"
         ),
         // Swift wrapper
         .target(
-            name: "CausalitySwift",
+            name: "Causality",
             dependencies: ["CausalityCore"],
             path: "Sources/Causality"
         ),
         .testTarget(
             name: "CausalityTests",
-            dependencies: ["CausalitySwift"],
+            dependencies: ["Causality"],
             path: "Tests/CausalityTests"
         )
     ]

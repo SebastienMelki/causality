@@ -18,9 +18,9 @@ class ExampleApplication : Application() {
         // Initialize Causality SDK using the DSL builder.
         // In production, these values should come from BuildConfig or a config file.
         Causality.initialize(this) {
-            apiKey = "example-api-key-compose"
+            apiKey = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
             endpoint = "http://10.0.2.2:8080" // Android emulator localhost
-            appId = "compose-example"
+            appId = "dev-app"
             debugMode = true
             enableSessionTracking = true
         }

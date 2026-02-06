@@ -8,9 +8,9 @@ struct SwiftUIExampleApp: App {
         // Initialize Causality SDK
         do {
             try Causality.shared.initialize(config: Config(
-                apiKey: "your-api-key", // Replace with actual key
-                endpoint: "http://localhost:8080", // Replace with server URL
-                appId: "swiftui-example",
+                apiKey: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                endpoint: "http://localhost:8080",
+                appId: "dev-app",
                 debugMode: true
             ))
             print("[SwiftUIExample] Causality SDK initialized")

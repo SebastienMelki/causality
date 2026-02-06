@@ -19,9 +19,9 @@ class ExampleApplication : Application() {
         // Initialize Causality SDK with DSL configuration.
         // Use 10.0.2.2 to reach host localhost from Android emulator.
         Causality.initialize(this) {
-            apiKey = "example-api-key-replace-me"
-            endpoint = "http://10.0.2.2:8080"
-            appId = "views-example"
+            apiKey = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+            endpoint = "http://10.0.2.2:8080" // Android emulator localhost
+            appId = "dev-app"
 
             // Optional configuration
             batchSize = 10

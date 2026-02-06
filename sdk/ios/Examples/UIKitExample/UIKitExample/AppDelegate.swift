@@ -12,9 +12,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Initialize Causality SDK
         do {
             try Causality.shared.initialize(config: Config(
-                apiKey: "your-api-key", // Replace with actual key
-                endpoint: "http://localhost:8080", // Replace with server URL
-                appId: "uikit-example",
+                apiKey: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                endpoint: "http://localhost:8080",
+                appId: "dev-app",
                 debugMode: true
             ))
             print("[UIKitExample] Causality SDK initialized")

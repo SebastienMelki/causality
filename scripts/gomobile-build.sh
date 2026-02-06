@@ -29,7 +29,7 @@ SDK_PACKAGE="./sdk/mobile"
 
 # iOS settings
 IOS_PREFIX="CAU"
-IOS_OUTPUT="${BUILD_DIR}/Causality.xcframework"
+IOS_OUTPUT="${BUILD_DIR}/CausalityCore.xcframework"
 
 # Android settings
 ANDROID_API=21
@@ -56,10 +56,9 @@ check_go_version() {
     fi
 
     local go_version
-    go_version=$(go version | grep -oP 'go(\d+\.\d+)' | head -1 | sed 's/go//')
+    go_version=$(go version | awk '{print $3}' | sed 's/go//' | cut -d. -f1,2)
     if [ -z "$go_version" ]; then
-        # Fallback for different go version output formats
-        go_version=$(go version | awk '{print $3}' | sed 's/go//' | cut -d. -f1,2)
+        error "Could not determine Go version"
     fi
 
     local major minor min_major min_minor

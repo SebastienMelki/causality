@@ -1,4 +1,5 @@
 import Foundation
+import CausalityCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -53,7 +54,7 @@ enum Platform {
 
     static func setPlatformContext() {
         let ctx = collectContext()
-        MobileSetPlatformContext(
+        CAUMobileSetPlatformContext(
             ctx.platform,
             ctx.osVersion,
             ctx.model,
