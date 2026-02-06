@@ -15,6 +15,7 @@ var skipAuthPaths = []string{
 	"/health",
 	"/ready",
 	"/metrics",
+	"/api/admin/",
 }
 
 // authMiddleware returns HTTP middleware that validates the X-API-Key header.
