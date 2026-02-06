@@ -11,10 +11,20 @@
 package mobile
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/batch"
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/device"
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/identity"
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/session"
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/storage"
+	"github.com/SebastienMelki/causality/sdk/mobile/internal/transport"
 	"github.com/google/uuid"
 )
 
@@ -24,13 +34,20 @@ var (
 	instance *sdk
 )
 
-// sdk holds the initialized SDK state.
+// sdk holds the initialized SDK state with all wired components.
 type sdk struct {
-	config    *Config
-	deviceID  string
-	sessionID string
-	userID    string
-	debugMode bool
+	config          *Config
+	db              *storage.DB
+	queue           *storage.Queue
+	idManager       *device.IDManager
+	identityManager *identity.IdentityManager
+	sessionTracker  *session.Tracker
+	batcher         *batch.Batcher
+	transportClient *transport.Client
+	debugMode       bool
+
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	mu sync.RWMutex
 }
@@ -54,14 +71,86 @@ func Init(configJSON string) string {
 		return sdkErr.Error()
 	}
 
-	// Generate device ID
-	deviceID := uuid.New().String()
+	// Determine data path for SQLite storage
+	dataPath := cfg.DataPath
+	if dataPath == "" {
+		tmpDir, err := os.MkdirTemp("", "causality-sdk-*")
+		if err != nil {
+			sdkErr := &SDKError{
+				Code:     ErrCodeDiskError,
+				Message:  fmt.Sprintf("failed to create temp directory: %s", err.Error()),
+				Severity: SeverityFatal,
+			}
+			notifyErrorCallbacks(sdkErr)
+			return sdkErr.Error()
+		}
+		dataPath = tmpDir
+	}
+
+	// Open SQLite database
+	dbPath := filepath.Join(dataPath, "causality.db")
+	db, err := storage.NewDB(dbPath)
+	if err != nil {
+		sdkErr := &SDKError{
+			Code:     ErrCodeDiskError,
+			Message:  fmt.Sprintf("failed to open database: %s", err.Error()),
+			Severity: SeverityFatal,
+		}
+		notifyErrorCallbacks(sdkErr)
+		return sdkErr.Error()
+	}
+
+	// Create persistent event queue
+	queue := storage.NewQueue(db, cfg.MaxQueueSize)
+
+	// Create device ID manager
+	idManager := device.NewIDManager(db, cfg.PersistentDeviceID)
+
+	// Create identity manager and restore persisted identity
+	identityMgr := identity.NewIdentityManager(db)
+	if err := identityMgr.LoadFromDB(); err != nil {
+		// Non-fatal: identity will start fresh
+		if cfg.DebugMode {
+			debugLog("Failed to load persisted identity: %s", err.Error())
+		}
+	}
+
+	// Create session tracker if enabled
+	var sessionTracker *session.Tracker
+	if cfg.EnableSessionTracking != nil && *cfg.EnableSessionTracking {
+		timeout := time.Duration(cfg.SessionTimeoutMs) * time.Millisecond
+		sessionTracker = session.NewTracker(timeout, nil, nil)
+	}
+
+	// Create HTTP transport client
+	transportClient := transport.NewClient(
+		cfg.Endpoint,
+		cfg.APIKey,
+		30*time.Second, // HTTP request timeout
+		nil,            // Use default retry strategy
+	)
+
+	// Create context for background operations
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create batcher with flush loop
+	flushInterval := time.Duration(cfg.FlushIntervalMs) * time.Millisecond
+	batcher := batch.NewBatcher(queue, transportClient, cfg.BatchSize, flushInterval)
+	batcher.StartFlushLoop(ctx)
 
 	sdkMu.Lock()
 	instance = &sdk{
-		config:    cfg,
-		deviceID:  deviceID,
-		debugMode: cfg.DebugMode,
+		config:          cfg,
+		db:              db,
+		queue:           queue,
+		idManager:       idManager,
+		identityManager: identityMgr,
+		sessionTracker:  sessionTracker,
+		batcher:         batcher,
+		transportClient: transportClient,
+		debugMode:       cfg.DebugMode,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 	sdkMu.Unlock()
 
@@ -75,6 +164,14 @@ func Init(configJSON string) string {
 // Track enqueues an event for asynchronous batch sending.
 // The eventJSON string should be a serialized Event with type and properties.
 // Returns empty string on success, or an error message on failure.
+//
+// Track automatically injects metadata into every event:
+//   - device_id from the device ID manager
+//   - session_id from the session tracker (if enabled)
+//   - user_id from the identity manager (if set)
+//   - idempotency_key (generated UUID)
+//   - timestamp (UTC RFC3339Nano)
+//   - app_id from config
 //
 // Example event JSON:
 //
@@ -96,25 +193,57 @@ func Track(eventJSON string) string {
 		return sdkErr.Error()
 	}
 
+	// Generate idempotency key
+	idempotencyKey := uuid.New().String()
+
 	// Inject metadata
-	inst.mu.RLock()
 	event.Metadata = EventMetadata{
-		SessionID:      inst.sessionID,
-		DeviceID:       inst.deviceID,
-		UserID:         inst.userID,
 		Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: uuid.New().String(),
+		IdempotencyKey: idempotencyKey,
 		AppID:          inst.config.AppID,
 	}
-	inst.mu.RUnlock()
 
-	if inst.debugMode {
-		debugLog("Track: type=%s, idempotency_key=%s", event.Type, event.Metadata.IdempotencyKey)
+	// Inject device_id from ID manager
+	event.Metadata.DeviceID = inst.idManager.GetOrCreateDeviceID()
+
+	// Inject session_id from session tracker (if enabled)
+	if inst.sessionTracker != nil {
+		event.Metadata.SessionID = inst.sessionTracker.RecordActivity()
 	}
 
-	// Event is prepared for queueing.
-	// The actual queue (SQLite persistence) will be added in Plan 02-02.
-	_ = event
+	// Inject user_id from identity manager (if set)
+	user := inst.identityManager.GetUser()
+	if user != nil {
+		event.Metadata.UserID = user.UserID
+	}
+
+	if inst.debugMode {
+		debugLog("Track: type=%s, idempotency_key=%s, device_id=%s, session_id=%s",
+			event.Type, event.Metadata.IdempotencyKey, event.Metadata.DeviceID, event.Metadata.SessionID)
+	}
+
+	// Serialize event with all metadata
+	eventData, err := json.Marshal(event)
+	if err != nil {
+		sdkErr := &SDKError{
+			Code:     ErrCodeInvalidJSON,
+			Message:  fmt.Sprintf("failed to serialize event: %s", err.Error()),
+			Severity: SeverityWarning,
+		}
+		logError(sdkErr, inst.debugMode)
+		return sdkErr.Error()
+	}
+
+	// Enqueue via batcher
+	if err := inst.batcher.Add(string(eventData), idempotencyKey); err != nil {
+		sdkErr := &SDKError{
+			Code:     ErrCodeDiskError,
+			Message:  fmt.Sprintf("failed to enqueue event: %s", err.Error()),
+			Severity: SeverityWarning,
+		}
+		logError(sdkErr, inst.debugMode)
+		return sdkErr.Error()
+	}
 
 	return ""
 }
@@ -161,9 +290,24 @@ func SetUser(userJSON string) string {
 		return sdkErr.Error()
 	}
 
-	inst.mu.Lock()
-	inst.userID = user.UserID
-	inst.mu.Unlock()
+	// Convert bridge traits (map[string]string) to identity traits (map[string]interface{})
+	var traits map[string]interface{}
+	if user.Traits != nil {
+		traits = make(map[string]interface{}, len(user.Traits))
+		for k, v := range user.Traits {
+			traits[k] = v
+		}
+	}
+
+	if err := inst.identityManager.SetUser(user.UserID, traits, user.Aliases); err != nil {
+		sdkErr := &SDKError{
+			Code:     ErrCodeDiskError,
+			Message:  fmt.Sprintf("failed to persist user identity: %s", err.Error()),
+			Severity: SeverityWarning,
+		}
+		logError(sdkErr, inst.debugMode)
+		return sdkErr.Error()
+	}
 
 	if inst.debugMode {
 		debugLog("SetUser: user_id=%s", user.UserID)
@@ -181,9 +325,7 @@ func Reset() string {
 		return notInitializedError()
 	}
 
-	inst.mu.Lock()
-	inst.userID = ""
-	inst.mu.Unlock()
+	inst.identityManager.Reset()
 
 	if inst.debugMode {
 		debugLog("Reset: user identity cleared")
@@ -192,7 +334,8 @@ func Reset() string {
 	return ""
 }
 
-// ResetAll performs a full reset: clears user identity and regenerates device ID.
+// ResetAll performs a full reset: clears user identity, regenerates device ID,
+// clears the event queue, and ends the session.
 // Use this for complete logout / privacy reset scenarios.
 // Returns empty string on success, or an error message on failure.
 func ResetAll() string {
@@ -201,14 +344,27 @@ func ResetAll() string {
 		return notInitializedError()
 	}
 
-	inst.mu.Lock()
-	inst.userID = ""
-	inst.deviceID = uuid.New().String()
-	inst.sessionID = ""
-	inst.mu.Unlock()
+	// Clear user identity
+	inst.identityManager.Reset()
+
+	// Regenerate device ID
+	inst.idManager.RegenerateDeviceID()
+
+	// Clear event queue
+	if err := inst.queue.Clear(); err != nil {
+		if inst.debugMode {
+			debugLog("ResetAll: failed to clear queue: %s", err.Error())
+		}
+	}
+
+	// End session (disable and re-enable to force session rotation)
+	if inst.sessionTracker != nil {
+		inst.sessionTracker.SetEnabled(false)
+		inst.sessionTracker.SetEnabled(true)
+	}
 
 	if inst.debugMode {
-		debugLog("ResetAll: user, device ID, and session cleared")
+		debugLog("ResetAll: user, device ID, queue, and session cleared")
 	}
 
 	return ""
@@ -226,7 +382,16 @@ func Flush() string {
 		debugLog("Flush: force flush requested")
 	}
 
-	// Actual flush implementation will be added in Plan 02-05.
+	if err := inst.batcher.Flush(inst.ctx); err != nil {
+		sdkErr := &SDKError{
+			Code:     ErrCodeNetworkError,
+			Message:  fmt.Sprintf("flush failed: %s", err.Error()),
+			Severity: SeverityWarning,
+		}
+		logError(sdkErr, inst.debugMode)
+		return sdkErr.Error()
+	}
+
 	return ""
 }
 
@@ -238,9 +403,7 @@ func GetDeviceId() string {
 		return ""
 	}
 
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	return inst.deviceID
+	return inst.idManager.GetOrCreateDeviceID()
 }
 
 // GetSessionId returns the current session identifier.
@@ -251,9 +414,11 @@ func GetSessionId() string {
 		return ""
 	}
 
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	return inst.sessionID
+	if inst.sessionTracker == nil {
+		return ""
+	}
+
+	return inst.sessionTracker.CurrentSessionID()
 }
 
 // GetUserId returns the current user identifier.
@@ -264,9 +429,11 @@ func GetUserId() string {
 		return ""
 	}
 
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	return inst.userID
+	user := inst.identityManager.GetUser()
+	if user == nil {
+		return ""
+	}
+	return user.UserID
 }
 
 // IsInitialized returns true if the SDK has been initialized.
@@ -284,6 +451,70 @@ func SetDebugMode(enabled bool) {
 	inst.mu.Lock()
 	inst.debugMode = enabled
 	inst.mu.Unlock()
+}
+
+// AppDidEnterBackground notifies the SDK that the app went to background.
+// This triggers a flush of queued events and records the background transition
+// for session tracking.
+// Returns empty string on success, or an error message on failure.
+func AppDidEnterBackground() string {
+	inst := getInstance()
+	if inst == nil {
+		return notInitializedError()
+	}
+
+	// Notify session tracker
+	if inst.sessionTracker != nil {
+		inst.sessionTracker.AppDidEnterBackground()
+	}
+
+	// Trigger a flush to send queued events while we can
+	if err := inst.batcher.Flush(inst.ctx); err != nil {
+		if inst.debugMode {
+			debugLog("AppDidEnterBackground: flush failed: %s", err.Error())
+		}
+	}
+
+	if inst.debugMode {
+		debugLog("AppDidEnterBackground: recorded")
+	}
+
+	return ""
+}
+
+// AppWillEnterForeground notifies the SDK that the app is returning from background.
+// If the background duration exceeded the session timeout, the current session ends
+// and a new one will be started on the next Track call.
+// Returns empty string on success, or an error message on failure.
+func AppWillEnterForeground() string {
+	inst := getInstance()
+	if inst == nil {
+		return notInitializedError()
+	}
+
+	// Notify session tracker
+	if inst.sessionTracker != nil {
+		inst.sessionTracker.AppWillEnterForeground()
+	}
+
+	if inst.debugMode {
+		debugLog("AppWillEnterForeground: recorded")
+	}
+
+	return ""
+}
+
+// SetPlatformContext sets platform-specific device information.
+// Called by native wrappers (Swift/Kotlin) during SDK initialization.
+// All parameters use gomobile-compatible types.
+func SetPlatformContext(platform, osVersion, model, manufacturer, appVersion, buildNumber string, screenW, screenH int, locale, timezone string) {
+	device.SetPlatformContext(platform, osVersion, model, manufacturer, appVersion, buildNumber, screenW, screenH, locale, timezone)
+}
+
+// SetNetworkInfo updates the carrier and network type information.
+// Called by native wrappers when network conditions change.
+func SetNetworkInfo(carrier, networkType string) {
+	device.SetNetworkInfo(carrier, networkType)
 }
 
 // getInstance returns the SDK singleton, or nil if not initialized.
@@ -308,8 +539,22 @@ func notInitializedError() string {
 // This is not exported and not available via gomobile.
 func resetForTesting() {
 	sdkMu.Lock()
+	inst := instance
 	instance = nil
 	sdkMu.Unlock()
+
+	// Clean up components if they exist
+	if inst != nil {
+		if inst.cancel != nil {
+			inst.cancel()
+		}
+		if inst.batcher != nil {
+			inst.batcher.Stop()
+		}
+		if inst.db != nil {
+			inst.db.Close()
+		}
+	}
 
 	errorCallbacksMu.Lock()
 	errorCallbacks = nil
