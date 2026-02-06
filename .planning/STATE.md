@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-06 complete, 6 of 12 plans done
-- **Wave:** 4 of 7
+- **Plan:** 02-07 complete, 7 of 12 plans done
+- **Wave:** 5 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-06-PLAN.md (SDK Integration and Build Infrastructure)
+- **Last activity:** 2026-02-06 — Completed 02-07-PLAN.md (iOS Swift Wrapper)
 
-Progress: [█████████████████░] 17/23 total plans (Phase 1: 11/11, Phase 2: 6/12)
+Progress: [██████████████████░] 18/23 total plans (Phase 1: 11/11, Phase 2: 7/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -75,6 +75,13 @@ Progress: [█████████████████░] 17/23 total p
 - ResetAll uses SetEnabled(false/true) to end session via session tracker API
 - Background flush on AppDidEnterBackground to persist events before potential termination
 - Ordered cleanup in resetForTesting: cancel context -> Stop batcher -> Close DB
+- SPM binaryTarget with local path for development, URL+checksum for release
+- CausalitySwift target name to avoid namespace collision with CausalityCore binary
+- @MainActor singleton for thread-safe UI integration
+- Task.detached for non-blocking event tracking
+- withCheckedThrowingContinuation to bridge sync Go flush to async Swift
+- AnyCodable supports String, Int, Double, Bool property types
+- #if canImport(UIKit) for iOS/macOS platform conditional compilation
 
 ## Completed
 - Project initialization
@@ -100,12 +107,13 @@ Progress: [█████████████████░] 17/23 total p
 - **02-04**: Device context, ID, and user identity (platform context bridge, SQLite-persisted device ID, identity manager, 26 tests, 90.7%/88.7% coverage)
 - **02-05**: Event batching and HTTP transport (dual-trigger batcher, exponential backoff retry with jitter, 43 tests, 90.1%/87.4% coverage)
 - **02-06**: SDK integration and build infrastructure (full component wiring, metadata injection, lifecycle hooks, gomobile build scripts, 88 tests)
+- **02-07**: iOS Swift wrapper (SPM package, async/await API, Codable types, EventBuilder, Bridge, Platform context, 4 tests)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T10:33:00Z
-- **Stopped at:** Completed 02-06-PLAN.md (SDK Integration and Build Infrastructure)
+- **Last session:** 2026-02-06T10:30:40Z
+- **Stopped at:** Completed 02-07-PLAN.md (iOS Swift Wrapper)
 - **Resume file:** None
-- **Next plan:** Wave 4 continues (02-07 next)
+- **Next plan:** Wave 5 continues (02-08 next)
