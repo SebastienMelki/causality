@@ -1,13 +1,13 @@
 # Project State
 
 ## Current Position
-- **Phase:** 1 of 6 — Pipeline Hardening, Observability & Go SDK (COMPLETE)
-- **Plan:** 01-11 complete, 11 of 11 plans done (gap closure)
-- **Wave:** 5 of 5 (all waves complete)
-- **Status:** Phase complete with gap closure
-- **Last activity:** 2026-02-06 — Completed 01-11-PLAN.md (Test Coverage Gap Closure)
+- **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
+- **Plan:** 02-01 complete, 1 of 12 plans done
+- **Wave:** 1 of 7
+- **Status:** In progress
+- **Last activity:** 2026-02-06 — Completed 02-01-PLAN.md (Go Mobile Core with JSON Bridge)
 
-Progress: [███████████] 11/11 Phase 1 plans (including gap closure)
+Progress: [████████████░] 12/23 total plans (Phase 1: 11/11, Phase 2: 1/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -47,6 +47,13 @@ Progress: [███████████] 11/11 Phase 1 plans (including gap
 - testableConsumer wrapper for workerLoop testing without full JetStream mocking
 - Infrastructure-dependent code (S3, JetStream) requires integration tests for full coverage
 - **R1.10 clarification:** Test coverage >= 70% interpreted as "business logic coverage" (domain/service layers), not overall package coverage. Business logic coverage is 70-100%. Integration tests for infrastructure code deferred.
+- Mobile SDK package-level singleton pattern (gomobile cannot export struct methods as free functions)
+- ErrorCallback interface with single OnError(code, message, severity) method for gomobile compatibility
+- EnableSessionTracking uses *bool pointer for JSON omitempty with true default distinction
+- Privacy-first: PersistentDeviceID defaults false, app-scoped UUID generated per Init
+- JSON bridge pattern: complex data as JSON strings, parsed internally with validation
+- Error return convention: exported functions return string (empty=success, message=error)
+- Async error callbacks: notifyErrorCallbacks fires goroutines per callback, never blocks caller
 
 ## Completed
 - Project initialization
@@ -65,12 +72,14 @@ Progress: [███████████] 11/11 Phase 1 plans (including gap
 - **01-09**: Go SDK (Track/Flush/Close, UUID idempotency keys, batching, exponential backoff retry)
 - **01-10**: Test coverage (unit tests for auth, dedup, gateway, warehouse, compaction, SDK — 88-100% on business logic)
 - **01-11**: Test coverage gap closure (gateway service.go 97.2%, warehouse consumer workerLoop 90.9%, compaction pure logic 100%)
+- Phase 2 planning (12 plans, 7 waves)
+- **02-01**: Go mobile core (JSON bridge, 13 typed event structs, ErrorCallback system, 97.8% coverage)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T22:45:00Z
-- **Stopped at:** Completed 01-11-PLAN.md (Test Coverage Gap Closure), Phase 1 complete with gap closure
+- **Last session:** 2026-02-06T09:52:41Z
+- **Stopped at:** Completed 02-01-PLAN.md (Go Mobile Core with JSON Bridge)
 - **Resume file:** None
-- **Next phase:** Phase 2 — gomobile SDK (iOS/Android)
+- **Next plan:** 02-02-PLAN.md (SQLite persistent event queue)
