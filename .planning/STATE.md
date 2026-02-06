@@ -2,12 +2,12 @@
 
 ## Current Position
 - **Phase:** 2 of 6 — gomobile SDK (iOS/Android)
-- **Plan:** 02-04 complete, 4 of 12 plans done
+- **Plan:** 02-05 complete, 5 of 12 plans done
 - **Wave:** 3 of 7
 - **Status:** In progress
-- **Last activity:** 2026-02-06 — Completed 02-04-PLAN.md (Device Context, ID, and User Identity)
+- **Last activity:** 2026-02-06 — Completed 02-05-PLAN.md (Event Batching and HTTP Transport)
 
-Progress: [███████████████░] 15/23 total plans (Phase 1: 11/11, Phase 2: 4/12)
+Progress: [████████████████░] 16/23 total plans (Phase 1: 11/11, Phase 2: 5/12)
 
 ## Accumulated Decisions
 - Module pattern: hexagonal vertical slices (retcons pattern)
@@ -67,6 +67,10 @@ Progress: [███████████████░] 15/23 total plans (
 - Defensive copy on GetUser() to prevent external mutation of cached state
 - Double-check locking pattern for cached device ID retrieval (RLock fast path + Lock re-check)
 - SetNetworkInfo separate from SetPlatformContext for runtime network updates
+- EventQueue and EventSender interfaces for batcher testability via dependency injection
+- Non-blocking Add(): buffered flushCh (capacity 1) so event tracking never blocks caller
+- Final flush on Stop(): ensures queued events are not lost on SDK shutdown
+- Retry-After header: max(headerDelay, strategyDelay) so server backoff is honored but never weakens client backoff
 
 ## Completed
 - Project initialization
@@ -90,12 +94,13 @@ Progress: [███████████████░] 15/23 total plans (
 - **02-02**: SQLite persistent event queue (modernc.org/sqlite, FIFO with eviction, 30 tests, 82.3% coverage)
 - **02-03**: Session tracking (hybrid timeout + lifecycle tracker, 27 tests, 98.5% coverage)
 - **02-04**: Device context, ID, and user identity (platform context bridge, SQLite-persisted device ID, identity manager, 26 tests, 90.7%/88.7% coverage)
+- **02-05**: Event batching and HTTP transport (dual-trigger batcher, exponential backoff retry with jitter, 43 tests, 90.1%/87.4% coverage)
 
 ## Blockers
 - None
 
 ## Session Continuity
-- **Last session:** 2026-02-06T10:14:06Z
-- **Stopped at:** Completed 02-04-PLAN.md (Device Context, ID, and User Identity)
+- **Last session:** 2026-02-06T10:17:26Z
+- **Stopped at:** Completed 02-05-PLAN.md (Event Batching and HTTP Transport)
 - **Resume file:** None
-- **Next plan:** Wave 3 continues (02-05 next)
+- **Next plan:** Wave 3 continues (02-06 next)
