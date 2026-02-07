@@ -6,6 +6,9 @@
 # Default target
 .DEFAULT_GOAL := help
 
+# Development API key seeded in docker/postgres/init-causality-server.sql
+DEV_API_KEY := deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+
 # =============================================================================
 # Help
 # =============================================================================
@@ -213,56 +216,63 @@ trino-stats: ## Show event statistics
 # Testing & Events
 # =============================================================================
 test-event: ## Send a single test event
-	@curl -s -X POST http://localhost:8080/v1/events/ingest \
+	@NOW=$$(date +%s)000; \
+	curl -s -X POST http://localhost:8080/v1/events/ingest \
 		-H "Content-Type: application/json" \
-		-d '{"event":{"appId":"test-app","deviceId":"device-001","screenView":{"screenName":"HomeScreen"}}}' | jq .
+		-H "X-API-Key: $(DEV_API_KEY)" \
+		-d '{"event":{"appId":"dev-app","deviceId":"device-001","timestampMs":'$$NOW',"screenView":{"screenName":"HomeScreen"}}}' | jq .
 
 test-batch: ## Send a batch of test events
-	@curl -s -X POST http://localhost:8080/v1/events/batch \
+	@NOW=$$(date +%s)000; \
+	curl -s -X POST http://localhost:8080/v1/events/batch \
 		-H "Content-Type: application/json" \
-		-d '{"events":[{"appId":"test-app","deviceId":"d1","screenView":{"screenName":"Home"}},{"appId":"test-app","deviceId":"d2","buttonTap":{"buttonId":"btn-login","screenName":"Home"}},{"appId":"test-app","deviceId":"d3","userLogin":{"userId":"user-123","method":"email"}}]}' | jq .
+		-H "X-API-Key: $(DEV_API_KEY)" \
+		-d '{"events":[{"appId":"dev-app","deviceId":"d1","timestampMs":'$$NOW',"screenView":{"screenName":"Home"}},{"appId":"dev-app","deviceId":"d2","timestampMs":'$$NOW',"buttonTap":{"buttonId":"btn-login","screenName":"Home"}},{"appId":"dev-app","deviceId":"d3","timestampMs":'$$NOW',"userLogin":{"userId":"user-123","method":"email"}}]}' | jq .
 
 test-load: ## Send 100 test events for load testing
 	@echo "Sending 100 test events..."
-	@for i in $$(seq 1 10); do \
+	@NOW=$$(date +%s)000; \
+	for i in $$(seq 1 10); do \
 		curl -s -X POST http://localhost:8080/v1/events/batch \
 			-H "Content-Type: application/json" \
-			-d '{"events":[{"appId":"load-test","deviceId":"d'$$i'","screenView":{"screenName":"Screen'$$i'"}},{"appId":"load-test","deviceId":"d'$$i'","buttonTap":{"buttonId":"btn-'$$i'","screenName":"Screen'$$i'"}},{"appId":"load-test","deviceId":"d'$$i'","userLogin":{"userId":"user-'$$i'","method":"email"}},{"appId":"load-test","deviceId":"d'$$i'","productView":{"productId":"prod-'$$i'","productName":"Product '$$i'","priceCents":999}},{"appId":"load-test","deviceId":"d'$$i'","addToCart":{"productId":"prod-'$$i'","quantity":1,"priceCents":999}},{"appId":"load-test","deviceId":"d'$$i'","purchaseComplete":{"orderId":"order-'$$i'","totalCents":999,"currency":"USD"}},{"appId":"load-test","deviceId":"d'$$i'","appStart":{"isColdStart":true,"launchDurationMs":150}},{"appId":"load-test","deviceId":"d'$$i'","customEvent":{"eventName":"test_event_'$$i'","stringParams":{"key":"value"}}},{"appId":"load-test","deviceId":"d'$$i'","screenExit":{"screenName":"Screen'$$i'","durationMs":5000}},{"appId":"load-test","deviceId":"d'$$i'","networkChange":{}}]}' > /dev/null; \
+			-H "X-API-Key: $(DEV_API_KEY)" \
+			-d '{"events":[{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"screenView":{"screenName":"Screen'$$i'"}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"buttonTap":{"buttonId":"btn-'$$i'","screenName":"Screen'$$i'"}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"userLogin":{"userId":"user-'$$i'","method":"email"}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"productView":{"productId":"prod-'$$i'","productName":"Product '$$i'","priceCents":999}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"addToCart":{"productId":"prod-'$$i'","quantity":1,"priceCents":999}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"purchaseComplete":{"orderId":"order-'$$i'","totalCents":999,"currency":"USD"}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"appStart":{"isColdStart":true,"launchDurationMs":150}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"customEvent":{"eventName":"test_event_'$$i'","stringParams":{"key":"value"}}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"screenExit":{"screenName":"Screen'$$i'","durationMs":5000}},{"appId":"dev-app","deviceId":"d'$$i'","timestampMs":'$$NOW',"networkChange":{}}]}' > /dev/null; \
 	done
 	@echo "Done! Sent 100 events"
 
 test-random: ## Send random events with variation (for realistic graphs)
 	@echo "Sending random events..."
 	@for round in $$(seq 1 20); do \
+		NOW=$$(date +%s)000; \
 		device=$$((RANDOM % 100)); \
 		screen_count=$$((RANDOM % 10 + 1)); \
 		for s in $$(seq 1 $$screen_count); do \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","screenView":{"screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"screenView":{"screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
 		done; \
 		btn_count=$$((RANDOM % 8)); \
 		for b in $$(seq 1 $$btn_count); do \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","buttonTap":{"buttonId":"btn-'$$((RANDOM % 15))'","screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"buttonTap":{"buttonId":"btn-'$$((RANDOM % 15))'","screenName":"Screen'$$((RANDOM % 20))'"}}}' > /dev/null; \
 		done; \
 		if [ $$((RANDOM % 3)) -eq 0 ]; then \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","userLogin":{"userId":"user-'$$((RANDOM % 50))'","method":"email"}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"userLogin":{"userId":"user-'$$((RANDOM % 50))'","method":"email"}}}' > /dev/null; \
 		fi; \
 		if [ $$((RANDOM % 4)) -eq 0 ]; then \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","productView":{"productId":"prod-'$$((RANDOM % 30))'","productName":"Product","priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"productView":{"productId":"prod-'$$((RANDOM % 30))'","productName":"Product","priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
 		fi; \
 		if [ $$((RANDOM % 6)) -eq 0 ]; then \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","addToCart":{"productId":"prod-'$$((RANDOM % 30))'","quantity":'$$((RANDOM % 5 + 1))',"priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"addToCart":{"productId":"prod-'$$((RANDOM % 30))'","quantity":'$$((RANDOM % 5 + 1))',"priceCents":'$$((RANDOM % 10000 + 100))'}}}' > /dev/null; \
 		fi; \
 		if [ $$((RANDOM % 10)) -eq 0 ]; then \
-			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-				-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","purchaseComplete":{"orderId":"order-'$$RANDOM'","totalCents":'$$((RANDOM % 50000 + 500))',"currency":"USD"}}}' > /dev/null; \
+			curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+				-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"purchaseComplete":{"orderId":"order-'$$RANDOM'","totalCents":'$$((RANDOM % 50000 + 500))',"currency":"USD"}}}' > /dev/null; \
 		fi; \
-		curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" \
-			-d '{"event":{"appId":"app-'$$((RANDOM % 3))'","deviceId":"device-'$$device'","appStart":{"isColdStart":'$$([ $$((RANDOM % 2)) -eq 0 ] && echo true || echo false)',"launchDurationMs":'$$((RANDOM % 2000 + 100))'}}}' > /dev/null; \
+		curl -s -X POST http://localhost:8080/v1/events/ingest -H "Content-Type: application/json" -H "X-API-Key: $(DEV_API_KEY)" \
+			-d '{"event":{"appId":"dev-app","deviceId":"device-'$$device'","timestampMs":'$$NOW',"appStart":{"isColdStart":'$$([ $$((RANDOM % 2)) -eq 0 ] && echo true || echo false)',"launchDurationMs":'$$((RANDOM % 2000 + 100))'}}}' > /dev/null; \
 		echo -n "."; \
 	done
 	@echo ""
@@ -277,8 +287,8 @@ ready: ## Check server readiness
 # =============================================================================
 # NATS
 # =============================================================================
-nats-streams: ## List NATS streams
-	@curl -s "http://localhost:8222/jsz?streams=true" | jq '.streams'
+nats-streams: ## List NATS streams with message counts
+	@curl -s "http://localhost:8222/jsz?streams=true" | jq '{total_messages: .messages, total_bytes: .bytes, streams: [.account_details[].stream_detail[] | {name, messages: .state.messages, bytes: .state.bytes, consumers: .state.consumer_count}]}'
 
 nats-consumers: ## List NATS consumers
 	@curl -s "http://localhost:8222/jsz?consumers=true" | jq '.streams[].consumers'
@@ -298,23 +308,31 @@ minio-size: ## Show bucket size
 # =============================================================================
 # Mobile SDK (gomobile)
 # =============================================================================
-install-mobile: ## Install gomobile
+.PHONY: mobile-setup mobile-ios mobile-android mobile-all mobile-clean mobile-test
+
+mobile-setup: ## Install gomobile and initialize
 	@echo "Installing gomobile..."
 	@go install golang.org/x/mobile/cmd/gomobile@latest
 	@gomobile init
 
-mobile: ## Build mobile SDKs (iOS and Android)
-	@echo "Building mobile SDKs..."
-	@gomobile bind -target=android -o mobile/causality.aar ./mobile
-	@gomobile bind -target=ios -o mobile/Causality.xcframework ./mobile
+mobile-ios: ## Build iOS SDK (.xcframework)
+	@./scripts/gomobile-build.sh ios
 
-mobile-android: ## Build Android SDK only
-	@echo "Building Android SDK..."
-	@gomobile bind -target=android -o mobile/causality.aar ./mobile
+mobile-android: ## Build Android SDK (.aar)
+	@./scripts/gomobile-build.sh android
 
-mobile-ios: ## Build iOS SDK only
-	@echo "Building iOS SDK..."
-	@gomobile bind -target=ios -o mobile/Causality.xcframework ./mobile
+mobile-all: ## Build both iOS and Android SDKs
+	@./scripts/gomobile-build.sh all
+
+mobile-clean: ## Clean mobile build artifacts
+	@echo "Cleaning mobile build artifacts..."
+	@rm -rf build/mobile
+
+mobile-test: ## Run mobile SDK tests and verify no CGO
+	@echo "Running mobile SDK tests..."
+	@go test ./sdk/mobile/... -v -race
+	@echo "Verifying no CGO dependencies..."
+	@go list -f '{{.CgoFiles}}' ./sdk/mobile/... | grep -v '^\[\]$$' && echo "ERROR: CGO files found!" && exit 1 || echo "OK: No CGO dependencies"
 
 # =============================================================================
 # WebAssembly SDK

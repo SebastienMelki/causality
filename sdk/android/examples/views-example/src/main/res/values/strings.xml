@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Causality Views Example</string>
+    <string name="subtitle">SDK Integration Demo</string>
+
+    <!-- Info card -->
+    <string name="device_id_format">Device ID: %1$s</string>
+    <string name="user_id_format">User: %1$s</string>
+    <string name="device_id_placeholder">Device ID: loading...</string>
+    <string name="user_id_placeholder">User: anonymous</string>
+
+    <!-- Section headers -->
+    <string name="section_event_tracking">Event Tracking</string>
+    <string name="section_identity">Identity</string>
+    <string name="section_flush">Queue Management</string>
+
+    <!-- Buttons -->
+    <string name="button_track_event">Track Button Tap</string>
+    <string name="button_track_custom">Track Purchase Event</string>
+    <string name="button_track_screen">Track Screen View</string>
+    <string name="button_identify">Identify User</string>
+    <string name="button_reset">Reset Identity</string>
+    <string name="button_flush">Flush Events</string>
+
+    <!-- Status -->
+    <string name="status_ready">Ready - tap a button to track events</string>
+</resources>

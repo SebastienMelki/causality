@@ -54,7 +54,7 @@ services:
     image: postgres:16-alpine
     container_name: causality-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hive
@@ -63,6 +63,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init-redash.sql:/docker-entrypoint-initdb.d/01-init-redash.sql:ro
       - ./docker/postgres/init-reaction-engine.sql:/docker-entrypoint-initdb.d/02-init-reaction-engine.sql:ro
+      - ./docker/postgres/init-causality-server.sql:/docker-entrypoint-initdb.d/03-init-causality-server.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
       interval: 5s
@@ -225,11 +226,23 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       HTTP_ADDR: ":8080"
       NATS_URL: "nats://nats:4222"
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USER: "hive"
+      DATABASE_PASSWORD: "hive"
+      DATABASE_NAME: "causality_server"
+      DATABASE_SSL_MODE: "disable"
+      DEDUP_WINDOW: "10m"
+      MAX_BODY_SIZE: "5242880"
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_PER_KEY_RPS: "1000"
       LOG_LEVEL: "info"
       LOG_FORMAT: "json"
     healthcheck:
@@ -245,6 +258,7 @@ services:
       dockerfile: Dockerfile
       target: warehouse-sink
     container_name: causality-warehouse-sink
+    stop_grace_period: 2m
     depends_on:
       nats:
         condition: service_healthy
@@ -252,6 +266,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    ports:
+      - "9090:9090"   # Prometheus metrics
     environment:
       NATS_URL: "nats://nats:4222"
       S3_ENDPOINT: "http://minio:9000"
@@ -262,6 +278,12 @@ services:
       S3_USE_PATH_STYLE: "true"
       BATCH_MAX_EVENTS: "10"
       BATCH_FLUSH_INTERVAL: "30s"
+      METRICS_ADDR: ":9090"
+      SHUTDOWN_TIMEOUT: "90s"
+      COMPACTION_ENABLED: "true"
+      COMPACTION_SCHEDULE: "1h"
+      COMPACTION_TARGET_SIZE: "134217728"
+      COMPACTION_MIN_FILES: "2"
       LOG_LEVEL: "info"
       LOG_FORMAT: "json"
 
@@ -272,11 +294,14 @@ services:
       dockerfile: Dockerfile
       target: reaction-engine
     container_name: causality-reaction-engine
+    stop_grace_period: 1m
     depends_on:
       nats:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    ports:
+      - "9091:9091"   # Prometheus metrics
     environment:
       NATS_URL: "nats://nats:4222"
       DATABASE_HOST: "postgres"
@@ -286,6 +311,10 @@ services:
       DATABASE_NAME: "reaction_engine"
       DATABASE_SSL_MODE: "disable"
       CONSUMER_NAME: "analysis-engine"
+      METRICS_ADDR: ":9091"
+      SHUTDOWN_TIMEOUT: "30s"
+      CONSUMER_WORKER_COUNT: "2"
+      CONSUMER_FETCH_BATCH_SIZE: "100"
       ENGINE_RULE_REFRESH_INTERVAL: "30s"
       DISPATCHER_WORKERS: "5"
       DISPATCHER_POLL_INTERVAL: "1s"

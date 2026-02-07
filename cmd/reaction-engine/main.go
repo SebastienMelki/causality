@@ -4,13 +4,16 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/caarlos0/env/v10"
 
+	"github.com/SebastienMelki/causality/internal/dlq"
 	"github.com/SebastienMelki/causality/internal/nats"
+	"github.com/SebastienMelki/causality/internal/observability"
 	"github.com/SebastienMelki/causality/internal/reaction"
 	"github.com/SebastienMelki/causality/internal/reaction/db"
 )
@@ -23,8 +26,14 @@ type Config struct {
 	// LogFormat is the log format (json, text).
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
 
+	// MetricsAddr is the address for the Prometheus metrics endpoint.
+	MetricsAddr string `env:"METRICS_ADDR" envDefault:":9091"`
+
 	// NATS configuration.
 	NATS nats.Config `envPrefix:""`
+
+	// DLQ configuration.
+	DLQ dlq.Config `envPrefix:""`
 
 	// Reaction engine configuration.
 	Reaction reaction.Config `envPrefix:""`
@@ -55,11 +64,47 @@ func run() error {
 		"log_level", cfg.LogLevel,
 		"nats_url", cfg.NATS.URL,
 		"consumer", cfg.ConsumerName,
+		"metrics_addr", cfg.MetricsAddr,
 	)
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize observability (OTel + Prometheus)
+	obs, err := observability.New("reaction-engine")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if shutErr := obs.Shutdown(context.Background()); shutErr != nil {
+			logger.Error("observability shutdown error", "error", shutErr)
+		}
+	}()
+
+	// Create metrics instruments
+	metrics, err := observability.NewMetrics(obs.Meter())
+	if err != nil {
+		return err
+	}
+
+	// Start metrics and health HTTP server
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", obs.MetricsHandler())
+	metricsMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	metricsServer := &http.Server{
+		Addr:    cfg.MetricsAddr,
+		Handler: metricsMux,
+	}
+	go func() {
+		logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
+		if srvErr := metricsServer.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
+			logger.Error("metrics server error", "error", srvErr)
+		}
+	}()
 
 	// Setup signal handling
 	sigCh := make(chan os.Signal, 1)
@@ -82,6 +127,25 @@ func run() error {
 	// Create consumers
 	consumerConfigs := nats.DefaultConsumerConfigs()
 	if err := streamMgr.EnsureConsumers(ctx, stream, consumerConfigs); err != nil {
+		return err
+	}
+
+	// Ensure DLQ stream exists
+	if _, err := streamMgr.EnsureDLQStream(ctx); err != nil {
+		return err
+	}
+
+	// Create and start DLQ module
+	dlqModule := dlq.New(
+		natsClient.JetStream(),
+		natsClient.Conn(),
+		cfg.NATS.Stream.Name,
+		[]string{cfg.ConsumerName},
+		cfg.DLQ,
+		metrics,
+		logger,
+	)
+	if err := dlqModule.Start(ctx); err != nil {
 		return err
 	}
 
@@ -139,7 +203,10 @@ func run() error {
 		anomalyDetector,
 		cfg.ConsumerName,
 		cfg.NATS.Stream.Name,
+		cfg.Reaction.Consumer,
+		cfg.Reaction.ShutdownTimeout,
 		logger,
+		metrics,
 	)
 
 	if err := consumer.Start(ctx); err != nil {
@@ -163,6 +230,14 @@ func run() error {
 	anomalyDetector.Stop()
 	dispatcher.Stop()
 	engine.Stop()
+	dlqModule.Stop()
+
+	// Stop metrics server
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Reaction.ShutdownTimeout)
+	defer shutdownCancel()
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("metrics server shutdown error", "error", err)
+	}
 
 	if err := natsClient.Drain(); err != nil {
 		logger.Error("NATS drain error", "error", err)

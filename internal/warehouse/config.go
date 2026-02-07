@@ -15,6 +15,11 @@ type Config struct {
 
 	// Parquet configuration
 	Parquet ParquetConfig `envPrefix:"PARQUET_"`
+
+	// ShutdownTimeout is the maximum time to wait for graceful shutdown.
+	// During shutdown, in-flight batches are flushed. If this timeout expires,
+	// remaining messages may be lost.
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"60s"`
 }
 
 // S3Config holds S3/MinIO configuration.
@@ -51,6 +56,15 @@ type BatchConfig struct {
 
 	// MaxConcurrentWrites is the maximum number of concurrent S3 writes
 	MaxConcurrentWrites int `env:"MAX_CONCURRENT_WRITES" envDefault:"4"`
+
+	// WorkerCount is the number of goroutines that fetch and process messages
+	// from NATS in parallel. Each worker fetches a batch of messages and
+	// adds them to the shared batch buffer.
+	WorkerCount int `env:"WORKER_COUNT" envDefault:"1"`
+
+	// FetchBatchSize is the number of messages to fetch per pull request
+	// from the NATS consumer.
+	FetchBatchSize int `env:"FETCH_BATCH_SIZE" envDefault:"100"`
 }
 
 // ParquetConfig holds Parquet writer configuration.

@@ -33,8 +33,10 @@ out/
 *.aar
 *.framework/
 *.xcframework/
-ios/
-android/
+# Note: sdk/ios/ and sdk/android/ are source code (not ignored)
+# Only ignore top-level gomobile output directories
+/ios/
+/android/
 
 # WASM build outputs
 *.wasm

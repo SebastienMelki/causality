@@ -29,6 +29,9 @@ message EventEnvelope {
   // Device context with platform information
   DeviceContext device_context = 6;
 
+  // SDK-generated idempotency key (UUID). Used for server-side deduplication.
+  string idempotency_key = 7;
+
   // Type-safe event payload using oneof
   oneof payload {
     // User events (1-99)

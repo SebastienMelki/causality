@@ -20,6 +20,11 @@ plugins:
     out: pkg/proto
     opt: paths=source_relative
 
+  # sebuf HTTP client generation
+  - local: protoc-gen-go-client
+    out: pkg/proto
+    opt: paths=source_relative
+
   # sebuf OpenAPI generation
   - local: protoc-gen-openapiv3
     out: api/openapi

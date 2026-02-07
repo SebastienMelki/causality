@@ -6,6 +6,7 @@ package causalityv1
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -133,7 +134,8 @@ func bindDataBasedOnContentType[Req any](r *http.Request, toBind *Req) error {
 	case BinaryContentType, ProtoContentType:
 		return bindDataFromBinaryRequest(r, toBind)
 	default:
-		return bindDataFromBinaryRequest(r, toBind)
+		// Default to JSON for unrecognized content types
+		return bindDataFromJSONRequest(r, toBind)
 	}
 }
 
@@ -146,6 +148,11 @@ func bindDataFromJSONRequest[Req any](r *http.Request, toBind *Req) error {
 
 	if len(bodyBytes) == 0 {
 		return nil
+	}
+
+	// Check for custom JSON unmarshaler (unwrap support)
+	if unmarshaler, ok := any(toBind).(json.Unmarshaler); ok {
+		return unmarshaler.UnmarshalJSON(bodyBytes)
 	}
 
 	protoRequest, ok := any(toBind).(proto.Message)
@@ -344,6 +351,12 @@ func genericHandler[Req any, Res any](serve func(context.Context, Req) (Res, err
 
 		response, err := serve(r.Context(), request)
 		if err != nil {
+			// Check if error is already a proto.Message (e.g., custom proto error types)
+			// If so, pass it directly - defaultErrorResponse will preserve its structure
+			if _, ok := err.(proto.Message); ok {
+				writeErrorWithHandler(w, r, err, errorHandler)
+				return
+			}
 			errorMsg := &sebufhttp.Error{
 				Message: err.Error(),
 			}
@@ -359,6 +372,13 @@ func genericHandler[Req any, Res any](serve func(context.Context, Req) (Res, err
 			writeErrorWithHandler(w, r, errorMsg, errorHandler)
 			return
 		}
+
+		// Set Content-Type based on request Content-Type (matching serialization format)
+		respContentType := "application/json"
+		if ct := filterFlags(r.Header.Get("Content-Type")); ct == BinaryContentType || ct == ProtoContentType {
+			respContentType = "application/x-protobuf"
+		}
+		w.Header().Set("Content-Type", respContentType)
 
 		_, err = w.Write(responseBytes)
 		if err != nil {
@@ -384,11 +404,19 @@ func marshalResponse(r *http.Request, response any) ([]byte, error) {
 
 	switch filterFlags(contentType) {
 	case JSONContentType:
+		// Check for custom JSON marshaler (unwrap support)
+		if marshaler, ok := response.(json.Marshaler); ok {
+			return marshaler.MarshalJSON()
+		}
 		return protojson.Marshal(msg)
 	case BinaryContentType, ProtoContentType:
 		return proto.Marshal(msg)
 	default:
-		return nil, fmt.Errorf("unsupported content type: %s", contentType)
+		// Default to JSON for unrecognized content types
+		if marshaler, ok := response.(json.Marshaler); ok {
+			return marshaler.MarshalJSON()
+		}
+		return protojson.Marshal(msg)
 	}
 }
 
@@ -418,15 +446,19 @@ func writeProtoMessageResponse(w http.ResponseWriter, r *http.Request, msg proto
 
 	var responseBytes []byte
 	var err error
+	var respContentType string
 
 	switch filterFlags(contentType) {
 	case JSONContentType:
 		responseBytes, err = protojson.Marshal(msg)
+		respContentType = "application/json"
 	case BinaryContentType, ProtoContentType:
 		responseBytes, err = proto.Marshal(msg)
+		respContentType = "application/x-protobuf"
 	default:
-		// Default to JSON for error responses
+		// Default to JSON for unrecognized content types
 		responseBytes, err = protojson.Marshal(msg)
+		respContentType = "application/json"
 	}
 
 	if err != nil {
@@ -435,6 +467,7 @@ func writeProtoMessageResponse(w http.ResponseWriter, r *http.Request, msg proto
 		return
 	}
 
+	w.Header().Set("Content-Type", respContentType)
 	w.WriteHeader(statusCode)
 	_, _ = w.Write(responseBytes)
 }
@@ -504,6 +537,10 @@ func defaultErrorResponse(err error) proto.Message {
 	if errors.As(err, &handlerErr) {
 		return handlerErr
 	}
+	// Check if error is already a proto.Message (e.g., custom proto error types)
+	if protoErr, ok := err.(proto.Message); ok {
+		return protoErr
+	}
 	return &sebufhttp.Error{Message: err.Error()}
 }
 
@@ -557,20 +594,25 @@ func writeResponseBody(w http.ResponseWriter, r *http.Request, msg proto.Message
 
 	var responseBytes []byte
 	var err error
+	var respContentType string
 
 	switch filterFlags(contentType) {
 	case JSONContentType:
 		responseBytes, err = protojson.Marshal(msg)
+		respContentType = "application/json"
 	case BinaryContentType, ProtoContentType:
 		responseBytes, err = proto.Marshal(msg)
+		respContentType = "application/x-protobuf"
 	default:
 		responseBytes, err = protojson.Marshal(msg)
+		respContentType = "application/json"
 	}
 
 	if err != nil {
 		return // Can't write anything meaningful
 	}
 
+	w.Header().Set("Content-Type", respContentType)
 	_, _ = w.Write(responseBytes)
 }
 

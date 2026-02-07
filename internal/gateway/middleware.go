@@ -7,10 +7,13 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
+
+	"github.com/SebastienMelki/causality/internal/auth"
 )
 
 // ContextKey is a type for context keys.
@@ -162,7 +165,10 @@ func CORS(cfg CORSConfig) Middleware {
 	}
 }
 
-// RateLimit implements rate limiting using token bucket algorithm.
+// RateLimit implements global rate limiting using token bucket algorithm.
+//
+// Deprecated: Use PerKeyRateLimit for per-API-key rate limiting.
+// This global limiter remains available for backwards compatibility.
 func RateLimit(cfg RateLimitConfig) Middleware {
 	if !cfg.Enabled {
 		return func(next http.Handler) http.Handler {
@@ -178,6 +184,59 @@ func RateLimit(cfg RateLimitConfig) Middleware {
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 				return
 			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// PerKeyRateLimit implements per-API-key rate limiting using token bucket
+// algorithm. It reads the authenticated app_id from the request context
+// (set by the auth middleware) and maintains a separate rate limiter per key.
+//
+// Requests without an app_id in context (e.g., unauthenticated or health
+// endpoints) pass through without rate limiting.
+func PerKeyRateLimit(cfg RateLimitConfig) Middleware {
+	if !cfg.Enabled {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
+	var limiters sync.Map // map[string]*rate.Limiter
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			appID := auth.GetAppID(r.Context())
+			if appID == "" {
+				// No authenticated app_id; let it through (auth middleware
+				// will have already rejected unauthenticated requests on
+				// protected paths).
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Load or create per-key limiter
+			val, _ := limiters.LoadOrStore(appID,
+				rate.NewLimiter(rate.Limit(cfg.PerKeyRPS), cfg.PerKeyBurst),
+			)
+			limiter := val.(*rate.Limiter)
+
+			if !limiter.Allow() {
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// BodySizeLimit limits the request body to maxBytes. Requests exceeding
+// the limit receive a 413 Request Entity Too Large response.
+func BodySizeLimit(maxBytes int64) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 			next.ServeHTTP(w, r)
 		})
 	}

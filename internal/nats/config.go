@@ -45,6 +45,12 @@ type StreamConfig struct {
 
 	// Storage is the storage type (file or memory)
 	Storage string `env:"STORAGE" envDefault:"file"`
+
+	// DLQStreamName is the name of the dead-letter queue stream
+	DLQStreamName string `env:"DLQ_STREAM_NAME" envDefault:"CAUSALITY_DLQ"`
+
+	// DLQMaxAge is the maximum retention age for DLQ messages (default 30 days)
+	DLQMaxAge time.Duration `env:"DLQ_MAX_AGE" envDefault:"720h"`
 }
 
 // ConsumerConfig holds JetStream consumer configuration.

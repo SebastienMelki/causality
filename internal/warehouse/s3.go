@@ -61,6 +61,12 @@ func NewS3Client(ctx context.Context, cfg S3Config, logger *slog.Logger) (*S3Cli
 	return s3Client, nil
 }
 
+// RawClient returns the underlying AWS S3 client for use by other modules
+// (e.g., compaction) that need direct S3 API access.
+func (c *S3Client) RawClient() *s3.Client {
+	return c.client
+}
+
 // EnsureBucket creates the bucket if it doesn't exist.
 func (c *S3Client) EnsureBucket(ctx context.Context) error {
 	// Check if bucket exists
